@@ -9,9 +9,9 @@ Output/
 *.msi
 *.zip
 
-# Third-party WebView2 SDK binaries (fetch from NuGet)
-lib/
+# DLLs are ignored except the WebView2 SDK binaries committed in lib/
 *.dll
+!lib/*.dll
 
 # Editor / OS noise
 .vs/

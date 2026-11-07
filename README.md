@@ -16,6 +16,10 @@ MD-editor/
 │   │   └── launcher.cs          # Windows host (WinForms + WebView2), v1.3.4
 │   └── web/
 │       └── md-editor.html       # Editor UI: HTML + CSS + JS in one file (2026-06-12 version)
+├── lib/                         # WebView2 SDK DLLs referenced by the host (third-party binaries)
+│   ├── Microsoft.Web.WebView2.Core.dll
+│   ├── Microsoft.Web.WebView2.WinForms.dll
+│   └── WebView2Loader.dll
 ├── scripts/
 │   └── build-host.ps1           # Compiles launcher.cs and assembles a runnable folder (not yet verified)
 └── docs/
@@ -52,13 +56,13 @@ Details of the page ↔ host messages are in [`docs/host-bridge-protocol.md`](do
 
 - Windows 10 / 11, x64
 - [Microsoft Edge WebView2 Evergreen Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)
-- To build: the .NET Framework 4 C# compiler (`csc.exe`, included with Windows) and the WebView2 SDK assemblies `Microsoft.Web.WebView2.Core.dll`, `Microsoft.Web.WebView2.WinForms.dll` and `WebView2Loader.dll` (x64), e.g. from the `Microsoft.Web.WebView2` NuGet package.
+- To build: the .NET Framework 4 C# compiler (`csc.exe`, included with Windows). The WebView2 SDK assemblies it references — `Microsoft.Web.WebView2.Core.dll`, `Microsoft.Web.WebView2.WinForms.dll` and `WebView2Loader.dll` — are included in [`lib/`](lib/).
 
 The host is written to compile with the in-box C# 5 compiler (no newer language features).
 
 ## Build
 
-Put the three WebView2 DLLs in a folder (e.g. `lib\`), then from the repository root in PowerShell:
+The three WebView2 SDK DLLs are already in `lib\`. From the repository root in PowerShell:
 
 ```powershell
 .\scripts\build-host.ps1 -LibDir .\lib
@@ -81,8 +85,8 @@ The repository documents what was actually on hand when it was created:
 | BPMN process tools | Mentioned in the project description, but **no BPMN code is present** in the available sources. |
 | Installer script `md-editor.iss` (Inno Setup) | **Not included.** The v1.0 installer (`MDEditorSetup.exe`, Inno Setup 6.7) was not reverse-engineered; its script must be added from the original. |
 | `md-editor.ico`, `md-editor-icon.png` | **Not included.** Needed for the exe/taskbar and title-bar icons; the host still runs without them. |
-| WebView2 SDK DLLs | Not committed (third-party binaries); obtain from NuGet as described above. |
-| `scripts/build-host.ps1` | Written from the compile command in `launcher.cs`; **not yet run** against the real DLLs. |
+| WebView2 SDK DLLs (`lib/`) | Included as provided. They are third-party Microsoft binaries; their exact version and signature were **not recorded or verified** when added — check them against the `Microsoft.Web.WebView2` NuGet package before relying on them. |
+| `scripts/build-host.ps1` | Written from the compile command in `launcher.cs`; passes a syntax check but has **not yet been run** (the DLLs it needs are now in `lib/`). |
 | License | **None chosen yet.** Add a `LICENSE` file before sharing the code. |
 
 The installer binary is intentionally not committed; publish it as a GitHub Release asset instead.
