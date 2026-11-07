@@ -1,0 +1,2539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MD Editor</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='5' fill='%23143252'/%3E%3Ctext x='16' y='22' font-family='Segoe UI%2Csystem-ui%2Csans-serif' font-size='14' font-weight='bold' fill='%23ff7d14' text-anchor='middle'%3EMD%3C/text%3E%3C/svg%3E">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      background: #1e1e1e;
+      color: #ccc;
+      overflow: hidden;
+    }
+
+    /* ── Toolbar ── */
+    #toolbar {
+      display: flex;
+      align-items: center;
+      padding: 5px 10px;
+      background: #252526;
+      border-bottom: 1px solid #3e3e3e;
+      gap: 2px;
+      flex-shrink: 0;
+      flex-wrap: wrap;
+    }
+    .tbar-sep { width: 1px; height: 20px; background: #3e3e3e; margin: 0 4px; }
+    .btn {
+      background: transparent;
+      border: 1px solid transparent;
+      color: #ccc;
+      cursor: pointer;
+      padding: 3px 8px;
+      border-radius: 3px;
+      font-size: 12px;
+      font-weight: 500;
+      transition: background 0.1s, color 0.1s;
+      white-space: nowrap;
+      line-height: 1.4;
+    }
+    .btn:hover  { background: #3e3e3e; color: #fff; border-color: #555; }
+    .btn:active { background: #0e639c; color: #fff; }
+    .btn-bold   { font-weight: 700; }
+    .btn-italic { font-style: italic; }
+    .tbl-btn    { color: #9cdcfe; }
+    .tbl-btn:hover { color: #fff; }
+    #filename { margin-left: auto; font-size: 13px; font-weight: 600; color: #e0e0e0; padding: 3px 10px; background: #2a2a3a; border-radius: 4px; border: 1px solid #4a4a5a; letter-spacing: 0.2px; }
+
+    /* ── Main area ── */
+    #main { display: flex; flex: 1; overflow: hidden; }
+
+    /* ── Source pane ── */
+    #source-pane { display: flex; flex-direction: column; width: 50%; min-width: 120px; }
+
+    .pane-label {
+      padding: 3px 10px;
+      font-size: 10px;
+      color: #555;
+      background: #252526;
+      border-bottom: 1px solid #3e3e3e;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      flex-shrink: 0;
+      user-select: none;
+      transition: color 0.15s, background 0.15s;
+    }
+    .pane-label.active { color: #ccc; background: #2d2d2d; }
+
+    #source {
+      flex: 1;
+      width: 100%;
+      background: #1e1e1e;
+      color: #d4d4d4;
+      border: none;
+      outline: none;
+      padding: 16px 18px;
+      font-family: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', Consolas, monospace;
+      font-size: 13.5px;
+      line-height: 1.65;
+      resize: none;
+      tab-size: 2;
+    }
+    #source::placeholder { color: #444; }
+    #source::selection   { background: #264f78; }
+
+    /* ── Splitter ── */
+    #splitter {
+      width: 5px; background: #2d2d2d; cursor: col-resize; flex-shrink: 0;
+      transition: background 0.15s; position: relative;
+      display: flex; align-items: center; justify-content: center; overflow: visible;
+    }
+    #splitter:hover, #splitter.active { background: #0e639c; }
+    #splitter.src-hidden { width: 20px; background: #1e1e1e; cursor: pointer; border-right: 1px solid #3e3e3e; }
+    #splitter.src-hidden:hover, #splitter.src-hidden.active { background: #2d2d2d; }
+
+    #collapse-btn {
+      position: absolute; top: 50%; transform: translateY(-50%);
+      right: -11px; width: 14px; height: 36px; padding: 0;
+      background: #333; border: 1px solid #555; border-left: none;
+      border-radius: 0 5px 5px 0; color: #888; font-size: 8px;
+      cursor: pointer; z-index: 10; opacity: 0;
+      transition: opacity 0.15s, background 0.15s, color 0.15s;
+      display: flex; align-items: center; justify-content: center;
+    }
+    #splitter:hover #collapse-btn { opacity: 1; }
+    #collapse-btn:hover { background: #0e639c; color: #fff; border-color: #0e639c; }
+    #splitter.src-hidden #collapse-btn {
+      opacity: 1; right: auto; left: 50%; transform: translate(-50%, -50%);
+      border: 1px solid #444; border-radius: 4px;
+      background: #2a2a2a; color: #ccc; font-size: 10px; width: 14px;
+    }
+    #splitter.src-hidden:hover #collapse-btn { background: #0e639c; color: #fff; border-color: #0e639c; }
+
+    /* ── Rich Text pane ── */
+    #richtext-pane { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 120px; }
+
+    /* A4 page-width mode — constrains the page to A4 reading width (210mm ≈ 794px) */
+    #richtext-pane.a4 { background: #5f6368; }
+    #richtext-pane.a4 #richtext {
+      align-self: center; width: 794px; max-width: 100%;
+      margin: 18px 0; border-radius: 2px;
+      box-shadow: 0 4px 18px rgba(0,0,0,.4);
+    }
+    .btn.active-toggle, .btn.active-toggle:hover { background: #0e639c; color: #fff; border-color: #0e639c; }
+    /* "A4" squeezed into a little page-shaped icon */
+    #a4-btn { padding: 3px 6px; }
+    #a4-btn .a4-ico {
+      display: inline-block; border: 1.3px solid currentColor; border-radius: 2px;
+      padding: 0 2px; font-size: 9px; font-weight: 700; line-height: 12px; letter-spacing: 0.5px;
+    }
+
+    #richtext {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px 36px;
+      background: #fff;
+      color: #24292e;
+      outline: none;
+      cursor: text;
+      line-height: 1.75;
+    }
+
+    /* Editing cursor hint on hover */
+    #richtext:not(:focus) { cursor: text; }
+
+    /* ── Image button dropdown ── */
+    .img-wrap { position: relative; display: flex; align-items: center; }
+    #img-menu, #open-menu {
+      display: none; position: absolute; top: calc(100% + 3px); left: 0;
+      background: #252526; border: 1px solid #555; border-radius: 4px;
+      z-index: 200; min-width: 130px; box-shadow: 0 4px 12px rgba(0,0,0,.5);
+    }
+    .img-opt {
+      padding: 6px 12px; cursor: pointer; color: #ccc;
+      font-size: 12px; white-space: nowrap;
+    }
+    .img-opt:first-child { border-radius: 4px 4px 0 0; }
+    .img-opt:last-child  { border-radius: 0 0 4px 4px; }
+    .img-opt:hover { background: #094771; color: #fff; }
+    /* Open menu: recent files list + Browse */
+    #open-menu { min-width: 230px; max-width: 380px; }
+    #open-menu #recent-list .img-opt { overflow: hidden; text-overflow: ellipsis; }
+    #open-menu .open-empty { padding: 6px 12px; color: #777; font-size: 12px; font-style: italic; }
+    #open-menu .open-hdr { padding: 5px 12px 3px; color: #6a9; font-size: 10px; text-transform: uppercase; letter-spacing: .5px; }
+    #open-menu .open-sep { height: 1px; background: #3e3e3e; margin: 4px 0; }
+    #richtext:focus { box-shadow: inset 3px 0 0 #0e639c; }
+
+    /* ── Insert-table dropdown ── */
+    .tbl-wrap { position: relative; display: flex; align-items: center; }
+    #tbl-menu {
+      display: none; position: absolute; top: calc(100% + 3px); left: 0;
+      background: #252526; border: 1px solid #555; border-radius: 4px;
+      z-index: 200; padding: 10px; min-width: 178px;
+      box-shadow: 0 4px 12px rgba(0,0,0,.5);
+    }
+    #tbl-menu .tbl-menu-row {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 10px; margin-bottom: 8px;
+    }
+    #tbl-menu label { font-size: 12px; color: #ccc; }
+    #tbl-menu input[type=number] {
+      width: 62px; background: #1e1e1e; border: 1px solid #555; color: #ddd;
+      border-radius: 3px; padding: 3px 6px; font-size: 12px; outline: none;
+    }
+    #tbl-menu input[type=number]:focus { border-color: #0e639c; }
+    #tbl-menu .tbl-create {
+      width: 100%; margin-top: 2px; justify-content: center;
+      background: #0e639c; color: #fff; border-color: #0e639c;
+    }
+    #tbl-menu .tbl-create:hover { background: #1177bb; color: #fff; border-color: #1177bb; }
+
+    /* Custom dark stepper — white arrows, hide native spinner */
+    #tbl-menu input[type=number]::-webkit-inner-spin-button,
+    #tbl-menu input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+    #tbl-menu input[type=number] { -moz-appearance: textfield; }
+    .num-stepper { display: flex; align-items: stretch; }
+    #tbl-menu .num-stepper input[type=number] {
+      width: 46px; border-radius: 3px 0 0 3px; border-right: none;
+    }
+    .num-btns { display: flex; flex-direction: column; width: 18px; }
+    .num-btn {
+      flex: 1; min-height: 11px; padding: 0; line-height: 1;
+      background: #333; color: #fff; border: 1px solid #555;
+      cursor: pointer; font-size: 8px;
+      display: flex; align-items: center; justify-content: center;
+      transition: background 0.1s;
+    }
+    .num-up   { border-radius: 0 3px 0 0; border-bottom: none; }
+    .num-down { border-radius: 0 0 3px 0; }
+    .num-btn:hover  { background: #0e639c; }
+    .num-btn:active { background: #1177bb; }
+
+    /* ── Text-color dropdown ── */
+    .color-wrap { position: relative; display: flex; align-items: center; }
+    .color-split {
+      display: inline-flex; align-items: stretch; margin: 0 3px;
+      border: 1px solid #4a4a4a; border-radius: 4px; overflow: hidden;
+      background: #2d2d2d;
+    }
+    #color-apply-btn, #hl-apply-btn {
+      display: inline-flex; flex-direction: column; align-items: center; justify-content: center;
+      line-height: 1; padding: 2px 6px; border: none; border-radius: 0;
+    }
+    #color-apply-btn .clr-bar { width: 14px; height: 3px; border-radius: 1px; margin-top: 2px; background: #e11d48; }
+    /* Highlight apply button: an "A" sitting on its current highlight color */
+    #hl-apply-btn .hl-letter { font-weight: 700; font-size: 12px; padding: 0 3px; border-radius: 2px; background: #fde047; color: #111; }
+    #color-caret-btn, #hl-caret-btn { padding: 2px 4px; border: none; border-radius: 0; font-size: 9px; border-left: 1px solid #4a4a4a; }
+    #color-menu, #hl-menu {
+      display: none; position: absolute; top: calc(100% + 3px); left: 0;
+      background: #252526; border: 1px solid #555; border-radius: 4px; z-index: 200;
+      padding: 8px; box-shadow: 0 4px 12px rgba(0,0,0,.5);
+    }
+    #color-menu .clr-grid, #hl-menu .clr-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+    #color-menu .clr-sw, #hl-menu .clr-sw {
+      width: 22px; height: 22px; border-radius: 4px; cursor: pointer;
+      border: 1px solid rgba(255,255,255,.15); transition: transform 0.1s, border-color 0.1s;
+    }
+    #color-menu .clr-sw:hover, #hl-menu .clr-sw:hover { transform: scale(1.12); border-color: #fff; }
+    #color-menu .clr-custom, #hl-menu .clr-custom {
+      display: flex; align-items: center; gap: 8px; margin-top: 9px;
+      font-size: 11px; color: #ccc; cursor: pointer;
+    }
+    #color-menu .clr-custom input[type=color], #hl-menu .clr-custom input[type=color] {
+      width: 28px; height: 22px; padding: 0; cursor: pointer;
+      background: #1e1e1e; border: 1px solid #555; border-radius: 3px;
+    }
+
+    /* ── Rendered Markdown styles ── */
+    #richtext h1,#richtext h2,#richtext h3,
+    #richtext h4,#richtext h5,#richtext h6 {
+      margin: 1.3em 0 0.5em; font-weight: 600; line-height: 1.3; color: #111;
+    }
+    #richtext h1 { font-size: 2em;   border-bottom: 2px solid #eaecef; padding-bottom: 0.3em; margin-top: 0; }
+    #richtext h2 { font-size: 1.5em; border-bottom: 1px solid #eaecef; padding-bottom: 0.2em; }
+    #richtext h3 { font-size: 1.25em; }
+    #richtext h4 { font-size: 1.1em; }
+    #richtext h5 { font-size: 1em;   }
+    #richtext h6 { font-size: 0.9em; color: #6a737d; }
+
+    #richtext p { margin: 0.8em 0; }
+    #richtext a { color: #0366d6; text-decoration: none; }
+    #richtext a:hover { text-decoration: underline; }
+
+    #richtext code {
+      background: #f0f0f0; padding: 1px 5px; border-radius: 3px;
+      font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace;
+      font-size: 0.875em; color: #c7254e;
+    }
+    #richtext pre {
+      background: #f6f8fa; border: 1px solid #e1e4e8; border-radius: 6px;
+      padding: 14px 16px; overflow-x: auto; margin: 1em 0;
+    }
+    #richtext pre code { background: none; padding: 0; color: #24292e; font-size: 13px; }
+
+    #richtext blockquote {
+      border-left: 4px solid #dfe2e5; margin: 1em 0; padding: 4px 16px; color: #6a737d;
+    }
+    #richtext blockquote p { margin: 0.3em 0; }
+
+    #richtext ul, #richtext ol { margin: 0.7em 0; padding-left: 2em; }
+    #richtext li { margin: 0.3em 0; line-height: 1.65; }
+    /* Hierarchical outline numbering: 1.  →  1.1  →  1.1.1 … */
+    /* Per-level counters (c1..c5) — counter() uses only the innermost in scope,
+       so separate top-level lists never accumulate into 1.1; real nesting still does. */
+    #richtext ol                  { counter-reset: c1; }
+    #richtext ol ol               { counter-reset: c2; }
+    #richtext ol ol ol            { counter-reset: c3; }
+    #richtext ol ol ol ol         { counter-reset: c4; }
+    #richtext ol ol ol ol ol      { counter-reset: c5; }
+    #richtext ol > li             { counter-increment: c1; }
+    #richtext ol ol > li          { counter-increment: c2; }
+    #richtext ol ol ol > li       { counter-increment: c3; }
+    #richtext ol ol ol ol > li    { counter-increment: c4; }
+    #richtext ol ol ol ol ol > li { counter-increment: c5; }
+    #richtext ol > li::marker             { content: counter(c1) ". "; font-weight: 600; }
+    #richtext ol ol > li::marker          { content: counter(c1) "." counter(c2) ". "; }
+    #richtext ol ol ol > li::marker       { content: counter(c1) "." counter(c2) "." counter(c3) ". "; }
+    #richtext ol ol ol ol > li::marker    { content: counter(c1) "." counter(c2) "." counter(c3) "." counter(c4) ". "; }
+    #richtext ol ol ol ol ol > li::marker { content: counter(c1) "." counter(c2) "." counter(c3) "." counter(c4) "." counter(c5) ". "; }
+
+    #richtext table { border-collapse: collapse; width: 100%; margin: 1em 0; font-size: 0.95em; }
+    #richtext th, #richtext td { border: 1px solid #dfe2e5; padding: 7px 13px; text-align: left; }
+    #richtext th { background: #f6f8fa; font-weight: 600; }
+    #richtext tr:nth-child(even) td { background: #fafbfc; }
+
+    #richtext hr { border: none; border-top: 2px solid #eaecef; margin: 1.5em 0; }
+    #richtext img { max-width: 100%; height: auto; border-radius: 4px; }
+    /* Image resize overlay (positioned over the selected image; coords are viewport-fixed) */
+    #img-rsz {
+      position: fixed; display: none; z-index: 500; pointer-events: none;
+      border: 1px dashed #ff7d14; border-radius: 4px;
+    }
+    #img-rsz-h {
+      position: absolute; right: -6px; bottom: -6px; width: 12px; height: 12px;
+      background: #ff7d14; border: 2px solid #fff; border-radius: 3px;
+      cursor: nwse-resize; pointer-events: auto; box-shadow: 0 0 3px rgba(0,0,0,.4);
+    }
+    #richtext .puml-pending {
+      padding: 14px 18px; margin: 1em 0;
+      background: #f6f8fa; border: 1px solid #e1e4e8; border-radius: 6px;
+      color: #888; font-style: italic; font-size: 0.9em;
+    }
+    #richtext .puml-img { margin: 1em 0; overflow-x: auto; }
+    #richtext strong { font-weight: 700; }
+    #richtext em     { font-style: italic; }
+    #richtext del    { color: #888; text-decoration: line-through; }
+
+    #richtext .task-item { list-style: none; margin-left: -1.5em; }
+    #richtext .task-item input[type=checkbox] { margin-right: 6px; }
+
+    /* ── Status bar ── */
+    #statusbar {
+      padding: 2px 12px; background: #007acc; font-size: 11px; color: #fff;
+      display: flex; gap: 18px; flex-shrink: 0;
+    }
+
+    /* ── Table context menu (right-click) ── */
+    #ctx-menu {
+      position: fixed; z-index: 1000; min-width: 168px; display: none;
+      background: #252526; border: 1px solid #555; border-radius: 5px;
+      box-shadow: 0 6px 18px rgba(0,0,0,.55); padding: 4px 0;
+      font-size: 12px; user-select: none;
+    }
+    #ctx-menu .ctx-title {
+      padding: 4px 14px 5px; font-size: 10px; text-transform: uppercase;
+      letter-spacing: 0.7px; color: #777;
+    }
+    #ctx-menu .ctx-item {
+      padding: 6px 14px; cursor: pointer; color: #ccc; white-space: nowrap;
+      display: flex; align-items: center; gap: 9px;
+    }
+    #ctx-menu .ctx-item .ctx-ico { width: 14px; text-align: center; color: #9cdcfe; }
+    #ctx-menu .ctx-item:hover { background: #094771; color: #fff; }
+    #ctx-menu .ctx-item:hover .ctx-ico { color: #fff; }
+    #ctx-menu .ctx-item.disabled { color: #555; cursor: default; }
+    #ctx-menu .ctx-item.disabled .ctx-ico { color: #444; }
+    #ctx-menu .ctx-item.disabled:hover { background: transparent; color: #555; }
+    #ctx-menu .ctx-sep { height: 1px; background: #3e3e3e; margin: 4px 0; }
+
+    /* Scrollbars */
+    #richtext::-webkit-scrollbar       { width: 8px; }
+    #richtext::-webkit-scrollbar-track { background: #f0f0f0; }
+    #richtext::-webkit-scrollbar-thumb { background: #bbb; border-radius: 4px; }
+    #source::-webkit-scrollbar         { width: 8px; }
+    #source::-webkit-scrollbar-track   { background: #252526; }
+    #source::-webkit-scrollbar-thumb   { background: #555; border-radius: 4px; }
+  </style>
+</head>
+<body>
+
+<div id="toolbar">
+  <div class="img-wrap">
+    <button class="btn" id="open-btn" onclick="toggleOpenMenu(event)" title="Open (Ctrl+O) — recent files & browse">Open ▾</button>
+    <div id="open-menu">
+      <div class="open-hdr" id="open-hdr">Recent files</div>
+      <div id="recent-list"></div>
+      <div class="open-sep"></div>
+      <div class="img-opt" id="open-browse" onclick="openFile()">📂 Browse files…</div>
+    </div>
+  </div>
+  <button class="btn" onclick="saveFile()"   title="Save (Ctrl+S)">Save</button>
+  <button class="btn" onclick="saveFileAs()" title="Save As">Save As</button>
+  <button class="btn" onclick="refreshFile()" title="Reload file from disk (picks up external changes)" id="btn-refresh" style="opacity:0.4;cursor:default">↺</button>
+
+  <div class="tbar-sep"></div>
+
+  <button class="btn" onclick="undo()" title="Undo (Ctrl+Z)">↶</button>
+  <button class="btn" onclick="redo()" title="Redo (Ctrl+Y)">↷</button>
+
+  <div class="tbar-sep"></div>
+
+  <button class="btn btn-bold" onclick="insertHeading(1)" title="Heading 1">H1</button>
+  <button class="btn btn-bold" onclick="insertHeading(2)" title="Heading 2">H2</button>
+  <button class="btn btn-bold" onclick="insertHeading(3)" title="Heading 3">H3</button>
+
+  <div class="tbar-sep"></div>
+
+  <button class="btn btn-bold"   onclick="fmtWrap('**','**')"  title="Bold (Ctrl+B)">B</button>
+  <button class="btn btn-italic" onclick="fmtWrap('*','*')"    title="Italic (Ctrl+I)">I</button>
+  <button class="btn"            onclick="fmtWrap('~~','~~')"  title="Strikethrough"><s>S</s></button>
+  <button class="btn"            onclick="fmtWrap('`','`')"    title="Inline code">Code</button>
+  <div class="color-wrap">
+    <div class="color-split">
+      <button class="btn" id="color-apply-btn" onclick="applyCurrentColor()" title="Apply text color">
+        <span style="font-weight:700">A</span><span class="clr-bar" id="clr-bar"></span>
+      </button>
+      <button class="btn" id="color-caret-btn" onclick="toggleColorMenu(event)" title="Pick text color">▾</button>
+    </div>
+    <div id="color-menu">
+      <div class="clr-grid" id="clr-grid"></div>
+      <label class="clr-custom">Custom <input type="color" id="clr-input" value="#e11d48"></label>
+    </div>
+  </div>
+  <div class="color-wrap">
+    <div class="color-split">
+      <button class="btn" id="hl-apply-btn" onclick="applyCurrentHl()" title="Apply highlight">
+        <span class="hl-letter" id="hl-letter">A</span>
+      </button>
+      <button class="btn" id="hl-caret-btn" onclick="toggleHlMenu(event)" title="Pick highlight color">▾</button>
+    </div>
+    <div id="hl-menu">
+      <div class="clr-grid" id="hl-grid"></div>
+      <label class="clr-custom">Custom <input type="color" id="hl-input" value="#fde047"></label>
+    </div>
+  </div>
+  <button class="btn" onclick="clearFormatting()" title="Clear formatting from selection">⌫</button>
+
+  <div class="tbar-sep"></div>
+
+  <button class="btn" onclick="fmtList('ul')"    title="Bullet list">• List</button>
+  <button class="btn" onclick="fmtList('ol')"    title="Ordered list">1. List</button>
+  <button class="btn" onclick="listIndent(-1)" title="Decrease list level (outdent)">⇤</button>
+  <button class="btn" onclick="listIndent(1)"  title="Increase list level (indent)">⇥</button>
+  <button class="btn" onclick="continueNumbering()" title="Continue numbering from the previous list">↪1.</button>
+
+  <div class="tbar-sep"></div>
+
+  <button class="btn" onclick="fmtLink()"      title="Link">Link</button>
+  <div class="img-wrap">
+    <button class="btn" id="img-btn" onclick="toggleImgMenu(event)" title="Insert image">Image ▾</button>
+    <div id="img-menu">
+      <div class="img-opt" onclick="fmtImageUrl()">From URL</div>
+      <label class="img-opt" id="img-embed-lbl" for="img-input">From File</label>
+    </div>
+  </div>
+  <div class="tbl-wrap">
+    <button class="btn" id="tbl-btn" onclick="toggleTblMenu(event)" title="Insert table">Table ▾</button>
+    <div id="tbl-menu">
+      <div class="tbl-menu-row">
+        <label for="tbl-rows">Rows</label>
+        <div class="num-stepper">
+          <input type="number" id="tbl-rows" min="1" max="50" value="2">
+          <span class="num-btns">
+            <button type="button" class="num-btn num-up"   data-target="tbl-rows" tabindex="-1" aria-label="Increase rows">▲</button>
+            <button type="button" class="num-btn num-down" data-target="tbl-rows" tabindex="-1" aria-label="Decrease rows">▼</button>
+          </span>
+        </div>
+      </div>
+      <div class="tbl-menu-row">
+        <label for="tbl-cols">Columns</label>
+        <div class="num-stepper">
+          <input type="number" id="tbl-cols" min="1" max="20" value="3">
+          <span class="num-btns">
+            <button type="button" class="num-btn num-up"   data-target="tbl-cols" tabindex="-1" aria-label="Increase columns">▲</button>
+            <button type="button" class="num-btn num-down" data-target="tbl-cols" tabindex="-1" aria-label="Decrease columns">▼</button>
+          </span>
+        </div>
+      </div>
+      <button class="btn tbl-create" onclick="confirmCreateTable()">Create table</button>
+    </div>
+  </div>
+  <button class="btn" onclick="fmtCodeBlock()" title="Code block">``` Block</button>
+  <button class="btn" onclick="fmtHR()"        title="Horizontal rule">HR</button>
+
+  <div class="tbar-sep"></div>
+
+  <button class="btn" id="a4-btn" onclick="toggleA4()" title="Toggle A4 page width"><span class="a4-ico">A4</span></button>
+
+  <span id="filename">untitled.md</span>
+</div>
+
+<div id="main">
+  <div id="source-pane">
+    <div class="pane-label active" id="lbl-source">Source</div>
+    <textarea id="source" spellcheck="false" placeholder="Start writing Markdown…"></textarea>
+  </div>
+
+  <div id="splitter"><button id="collapse-btn" title="Hide source pane">◀</button></div>
+
+  <div id="richtext-pane">
+    <div class="pane-label" id="lbl-richtext">Rich Text (click to edit)</div>
+    <div id="richtext" contenteditable="true" spellcheck="false"></div>
+  </div>
+</div>
+
+<div id="statusbar">
+  <span id="st-words">Words: 0</span>
+  <span id="st-chars">Chars: 0</span>
+  <span id="st-lines">Lines: 0</span>
+  <span id="st-cursor">Ln 1, Col 1</span>
+</div>
+
+<div id="ctx-menu">
+  <div class="ctx-title">Table</div>
+  <div class="ctx-item" data-act="addRow"><span class="ctx-ico">＋</span>Insert row below</div>
+  <div class="ctx-item" data-act="delRow"><span class="ctx-ico">－</span>Delete row</div>
+  <div class="ctx-sep"></div>
+  <div class="ctx-item" data-act="addCol"><span class="ctx-ico">＋</span>Insert column right</div>
+  <div class="ctx-item" data-act="delCol"><span class="ctx-ico">－</span>Delete column</div>
+</div>
+
+<!-- Image resize overlay: a dashed box over the selected image with a bottom-right drag handle -->
+<div id="img-rsz"><div id="img-rsz-h"></div></div>
+
+<input type="file" id="file-input" accept=".md,.markdown,.txt" style="display:none">
+<input type="file" id="img-input"  accept="image/*" style="position:fixed;top:-200px;left:-200px;width:1px;height:1px;opacity:0;">
+
+<!-- Parser source — custom type prevents execution; shared by main thread + worker -->
+<script type="text/x-md-parser" id="md-parser-src">
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function parseInline(s){
+  s=s.replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\s*\)/g,(_,alt,src,title)=>{
+    var attr='';
+    // Optional size hint in the title slot: "=WIDTHx" or "=WIDTHxHEIGHT" (px). Width sets a
+    // proportional resize (height stays auto); height is honored only if explicitly given.
+    var m=title&&/^=(\d+)?(?:x(\d+)?)?$/.exec(title.trim());
+    if(m){ if(m[1])attr+=' width="'+m[1]+'"'; if(m[2])attr+=' height="'+m[2]+'"'; }
+    return '<img src="'+esc(src)+'" alt="'+esc(alt)+'"'+attr+'>';
+  });
+  s=s.replace(/\[([^\]]+)\]\(([^)]+)\)/g,(_,label,href)=>'<a href="'+esc(href.trim())+'" target="_blank" rel="noopener">'+label+'</a>');
+  s=s.replace(/\*{3}([^\n]+?)\*{3}/g,'<strong><em>$1</em></strong>');
+  s=s.replace(/_{3}([^\n]+?)_{3}/g,  '<strong><em>$1</em></strong>');
+  s=s.replace(/\*{2}([^\n]+?)\*{2}/g,'<strong>$1</strong>');
+  s=s.replace(/_{2}([^\n]+?)_{2}/g,  '<strong>$1</strong>');
+  s=s.replace(/\*([^*\n]+?)\*/g,     '<em>$1</em>');
+  s=s.replace(/_([^_\n]+?)_/g,       '<em>$1</em>');
+  s=s.replace(/~~([^\n]+?)~~/g,      '<del>$1</del>');
+  s=s.replace(/ *\n/g,'<br>');
+  return s;
+}
+function protect(md){
+  var blocks=[],inlines=[],srcLines=md.split('\n'),outLines=[],inFence=false,fenceLang='',fenceLines=[];
+  for(var li=0;li<srcLines.length;li++){
+    var line=srcLines[li];
+    if(!inFence&&/^ {0,3}```/.test(line)){inFence=true;fenceLang=line.replace(/^ {0,3}```/,'').trim();fenceLines=[];}
+    else if(inFence&&/^ {0,3}```\s*$/.test(line)){
+      inFence=false;
+      if(fenceLang==='plantuml'){
+        var pumlB64=btoa(unescape(encodeURIComponent(fenceLines.join('\n'))));
+        blocks.push('<div class="puml-pending" data-src="'+pumlB64+'"><span>⏳ Rendering diagram…</span></div>');
+      }else{
+        blocks.push('<pre><code class="lang-'+esc(fenceLang)+'">'+esc(fenceLines.join('\n'))+'</code></pre>');
+      }
+      outLines.push('\x00B'+(blocks.length-1)+'\x00');
+    }else if(inFence){fenceLines.push(line);}
+    else{outLines.push(line);}
+  }
+  if(inFence){
+    if(fenceLang==='plantuml'){
+      var pumlB64=btoa(unescape(encodeURIComponent(fenceLines.join('\n'))));
+      blocks.push('<div class="puml-pending" data-src="'+pumlB64+'"><span>⏳ Rendering diagram…</span></div>');
+    }else{
+      blocks.push('<pre><code class="lang-'+esc(fenceLang)+'">'+esc(fenceLines.join('\n'))+'</code></pre>');
+    }
+    outLines.push('\x00B'+(blocks.length-1)+'\x00');
+  }
+  md=outLines.join('\n');
+  md=md.replace(/`([^`\n]+)`/g,function(_,code){inlines.push('<code>'+esc(code)+'</code>');return '\x00I'+(inlines.length-1)+'\x00';});
+  return {md:md,blocks:blocks,inlines:inlines};
+}
+function ri(s,inlines){return s.replace(/\x00I(\d+)\x00/g,function(_,i){return inlines[+i];});}
+function parseLine(line){return line.replace(/^\||\|$/g,'').split('|').map(function(c){return c.trim();});}
+// ── Nested list support (indentation → nesting) ──────────────────────────────
+function listItemMatch(line){
+  var m=line.match(/^(\s*)(\d+\.|[-*+])\s+(.*)$/);
+  if(!m) return null;
+  var indent=m[1].replace(/\t/g,'  ').length;
+  var ordered=/\d/.test(m[2]);
+  var num=ordered?parseInt(m[2],10):null;
+  var content=m[3],task=false,checked=false;
+  var tm=content.match(/^\[([ xX])\]\s+(.*)$/);
+  if(tm){task=true;checked=/[xX]/.test(tm[1]);content=tm[2];}
+  return {indent:indent,ordered:ordered,num:num,content:content,task:task,checked:checked};
+}
+function renderItems(items,idx,indent,inlines,level){
+  level=level||1;
+  var first=items[idx],tag=first.ordered?'ol':'ul',attr='';
+  if(first.ordered&&first.num&&first.num!==1){attr=' start="'+first.num+'" style="counter-reset:c'+Math.min(level,5)+' '+(first.num-1)+'"';}
+  var html='<'+tag+attr+'>\n',prevNum=null;
+  while(idx<items.length){
+    var it=items[idx];
+    if(it.indent<indent) break;
+    // A number that resets/decreases at the same level starts a NEW list (e.g. 1.→2.→1.)
+    if(it.indent===indent&&it.ordered&&prevNum!==null&&it.num!=null&&it.num<=prevNum) break;
+    var inner=it.task
+      ?'<input type="checkbox"'+(it.checked?' checked':'')+' disabled> '+ri(parseInline(it.content),inlines)
+      :ri(parseInline(it.content),inlines);
+    var cls=it.task?' class="task-item"':'';
+    idx++;
+    var child='';
+    if(idx<items.length&&items[idx].indent>indent){
+      var res=renderItems(items,idx,items[idx].indent,inlines,level+1);
+      child=res.html;idx=res.idx;
+    }
+    html+='<li'+cls+'>'+inner+child+'</li>\n';
+    if(it.indent===indent&&it.ordered) prevNum=it.num;
+  }
+  return {html:html+'</'+tag+'>\n',idx:idx};
+}
+function parseBlock(md,blocks,inlines){
+  var lines=md.split('\n'),html='',i=0;
+  while(i<lines.length){
+    var raw=lines[i],t=raw.trim();
+    if(/^\x00B\d+\x00$/.test(t)){html+=blocks[+t.match(/\d+/)[0]]+'\n';i++;continue;}
+    if(!t){i++;continue;}
+    var hm=raw.match(/^(#{1,6})\s+(.*)/);
+    if(hm){html+='<h'+hm[1].length+'>'+ri(parseInline(hm[2]),inlines)+'</h'+hm[1].length+'>\n';i++;continue;}
+    if(/^(\s*[-*_]){3,}\s*$/.test(t)&&new Set(t.replace(/\s/g,'')).size===1){html+='<hr>\n';i++;continue;}
+    if(/^>\s?/.test(raw)){
+      var bq=[];
+      while(i<lines.length&&/^>\s?/.test(lines[i])){bq.push(lines[i].replace(/^>\s?/,''));i++;}
+      html+='<blockquote>'+parseBlock(bq.join('\n'),blocks,inlines)+'</blockquote>\n';continue;
+    }
+    if(i+1<lines.length&&/\|/.test(raw)&&/^\|?[\s\-:|]+\|/.test(lines[i+1])){
+      var tl=[];
+      while(i<lines.length&&lines[i].trim()&&lines[i].includes('|')){tl.push(lines[i]);i++;}
+      if(tl.length>=2){
+        var hd=parseLine(tl[0]),ncols=hd.length,colPct=(100/ncols).toFixed(2)+'%';
+        var tbl='<table width="100%" style="width:100%;border-collapse:collapse;table-layout:fixed;">';
+        tbl+='<colgroup>'+hd.map(function(){return '<col width="'+colPct+'" style="width:'+colPct+'">';}).join('')+'</colgroup>';
+        tbl+='<thead><tr>';
+        hd.forEach(function(h){tbl+='<th style="border:1px solid #dfe2e5;padding:7px 13px;background:#f6f8fa;font-weight:bold;">'+ri(parseInline(h),inlines)+'</th>';});
+        tbl+='</tr></thead><tbody>';
+        for(var r=2;r<tl.length;r++){var cl=parseLine(tl[r]);tbl+='<tr>';cl.forEach(function(c){tbl+='<td style="border:1px solid #dfe2e5;padding:7px 13px;">'+ri(parseInline(c),inlines)+'</td>';});tbl+='</tr>';}
+        html+=tbl+'</tbody></table>\n';continue;
+      }
+    }
+    var lim=listItemMatch(raw);
+    if(lim){
+      var items=[];
+      while(i<lines.length){var m2=listItemMatch(lines[i]);if(!m2)break;items.push(m2);i++;}
+      var p=0;
+      while(p<items.length){var r=renderItems(items,p,items[p].indent,inlines);html+=r.html;p=r.idx;}
+      continue;
+    }
+    var para=[];
+    while(i<lines.length&&lines[i].trim()&&!/^(#{1,6}\s|>|\s*[-*+]\s|\s*\d+\.\s|(\s*[-*_]){3})/.test(lines[i])){para.push(lines[i]);i++;}
+    if(para.length){
+      var j=para.join('\n').trim();
+      if(/^\x00B\d+\x00$/.test(j)){html+=blocks[+j.match(/\d+/)[0]]+'\n';}
+      else{html+='<p>'+ri(parseInline(para.join('\n')),inlines)+'</p>\n';}
+    }else{i++;}
+  }
+  return html;
+}
+function parse(md){var p=protect(md);return parseBlock(p.md,p.blocks,p.inlines);}
+</script>
+
+<script>
+// ── Markdown parser (main thread — reads same source as worker) ────────────────
+const _parserSrc = document.getElementById('md-parser-src').textContent;
+const MD = new Function(_parserSrc + '\nreturn {parse};')();
+
+// ── Web Worker — parse off main thread so large files never freeze the UI ─────
+let _renderId = 0;
+const _mdWorker = new Worker(URL.createObjectURL(new Blob(
+  [_parserSrc + '\nself.onmessage=function(e){try{self.postMessage({html:parse(e.data.md),id:e.data.id});}catch(err){self.postMessage({html:null,id:e.data.id});}};'],
+  {type:'text/javascript'}
+)));
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  DOM → Markdown converter
+// ═══════════════════════════════════════════════════════════════════════════════
+// White / transparent background means "no highlight" — don't emit a span for it
+// (this is how the white swatch unhighlights without leaving markup behind).
+function _isNoHighlight(bg) {
+  if (!bg) return true;
+  const v = bg.toLowerCase().replace(/\s+/g, '');
+  return v === 'transparent' || v === 'rgba(0,0,0,0)' ||
+         v === 'white' || v === '#fff' || v === '#ffffff' || v === 'rgb(255,255,255)';
+}
+function domToMd(rootEl) {
+  // Recursively serialize a <ul>/<ol>, indenting nested lists by 2 spaces per depth.
+  function listToMd(listEl, depth) {
+    const ordered = listEl.tagName.toLowerCase() === 'ol';
+    const pad = '  '.repeat(depth);
+    let out = '', n = ordered ? (parseInt(listEl.getAttribute('start'), 10) || 1) - 1 : 0;
+    Array.from(listEl.children).forEach(child => {
+      const ctag = child.tagName.toLowerCase();
+      // Chrome's indent sometimes puts a nested list directly inside the parent
+      // <ol>/<ul> (as a sibling of the <li>) instead of inside the <li>. Recurse
+      // into those too, otherwise nested levels are lost when saving.
+      if (ctag === 'ul' || ctag === 'ol') { out += listToMd(child, depth + 1); return; }
+      if (ctag !== 'li') return;
+      n++;
+      const cb = child.querySelector(':scope > input[type="checkbox"]');
+      const prefix = cb ? (cb.checked ? '- [x] ' : '- [ ] ') : (ordered ? `${n}. ` : '- ');
+      let text = '', nested = '';
+      child.childNodes.forEach(ch => {
+        const t = ch.nodeType === Node.ELEMENT_NODE ? ch.tagName.toLowerCase() : '';
+        if (t === 'ul' || t === 'ol') nested += listToMd(ch, depth + 1);
+        else if (t !== 'input') text += walk(ch);
+      });
+      out += pad + prefix + text.trim() + '\n' + nested;
+    });
+    return out;
+  }
+
+  // A Markdown table cell can't hold a real newline, so in-cell line breaks
+  // (<br> or block boundaries from pressing Enter) become the literal <br> token.
+  // Breaks are preserved even with no text before/after them (leading, trailing, or
+  // blank line in the middle); only two artifacts are dropped: a block's trailing
+  // "filler" <br>, and the structural break a leading block wrapper would add.
+  function cellToMd(cell) {
+    function ser(node) {
+      let out = '';
+      node.childNodes.forEach(ch => {
+        if (ch.nodeType === Node.TEXT_NODE) { out += ch.textContent; return; }
+        if (ch.nodeType !== Node.ELEMENT_NODE) return;
+        const tag = ch.tagName.toLowerCase();
+        if (tag === 'br') { out += '\n'; return; }
+        if (tag === 'p' || tag === 'div' || tag === 'li') {
+          out += '\n' + ser(ch).replace(/\n+$/, '');  // block = new line; drop its filler <br>
+          return;
+        }
+        // Inline formatting must survive inside cells (bold/italic/strike/code/link/color/
+        // highlight) — GFM allows these inline markers and raw spans within a single-line cell.
+        let inner = ser(ch);
+        if (tag === 'strong' || tag === 'b') { out += inner.trim() ? `**${inner}**` : inner; return; }
+        if (tag === 'em' || tag === 'i')      { out += inner.trim() ? `*${inner}*`   : inner; return; }
+        if (tag === 'del' || tag === 's' || tag === 'strike') { out += inner.trim() ? `~~${inner}~~` : inner; return; }
+        if (tag === 'code') { out += `\`${inner}\``; return; }
+        if (tag === 'a')    { out += `[${inner}](${ch.getAttribute('href') || ''})`; return; }
+        if (tag === 'span') {
+          const st = ch.style;
+          if ((+st.fontWeight >= 700 || st.fontWeight === 'bold') && inner.trim()) inner = `**${inner}**`;
+          if (st.fontStyle === 'italic' && inner.trim()) inner = `*${inner}*`;
+          if (st.textDecoration && st.textDecoration.includes('line-through') && inner.trim()) inner = `~~${inner}~~`;
+          if (st.color && inner.trim()) inner = `<span style="color:${st.color}">${inner}</span>`;
+          if (st.backgroundColor && inner.trim() && !_isNoHighlight(st.backgroundColor)) inner = `<span style="background-color:${st.backgroundColor}">${inner}</span>`;
+          out += inner; return;
+        }
+        out += inner;                                  // other inline tags → flatten to text
+      });
+      return out;
+    }
+    let s = ser(cell);
+    // A block element as the very first node adds a structural leading break — drop it
+    // (but keep a leading <br>, which is an intentional empty first line).
+    const f = cell.firstChild;
+    if (f && f.nodeType === Node.ELEMENT_NODE && /^(p|div|li)$/.test(f.tagName.toLowerCase()))
+      s = s.replace(/^\n/, '');
+    return s
+      .replace(/ /g, ' ')
+      .replace(/[ \t]*\n[ \t]*/g, '\n')   // tidy spaces around breaks
+      .replace(/^[ \t]+|[ \t]+$/g, '')    // trim edge spaces (keep edge breaks)
+      .replace(/\n{2,}$/, '\n')           // a trailing break carries an editor "filler" <br> — keep one
+      .replace(/\|/g, '\\|')              // escape pipes so they don't split the cell
+      .replace(/\n/g, '<br>');            // breaks → GFM in-cell line break
+  }
+
+  function tableToMd(tbl) {
+    const rows = Array.from(tbl.querySelectorAll('tr'));
+    if (!rows.length) return '';
+    const hd = Array.from(rows[0].querySelectorAll('th,td')).map(cellToMd);
+    let md = '| ' + hd.join(' | ') + ' |\n' + '| ' + hd.map(() => '---').join(' | ') + ' |\n';
+    for (let i = 1; i < rows.length; i++) {
+      const cl = Array.from(rows[i].querySelectorAll('td,th')).map(cellToMd);
+      md += '| ' + cl.join(' | ') + ' |\n';
+    }
+    return md;
+  }
+
+  function walk(node) {
+    if (node.nodeType === Node.TEXT_NODE) return node.textContent;
+    if (node.nodeType !== Node.ELEMENT_NODE) return '';
+    const tag = node.tagName.toLowerCase();
+    const kids = () => Array.from(node.childNodes).map(walk).join('');
+
+    switch (tag) {
+      case 'h1': return `\n# ${kids().trim()}\n\n`;
+      case 'h2': return `\n## ${kids().trim()}\n\n`;
+      case 'h3': return `\n### ${kids().trim()}\n\n`;
+      case 'h4': return `\n#### ${kids().trim()}\n\n`;
+      case 'h5': return `\n##### ${kids().trim()}\n\n`;
+      case 'h6': return `\n###### ${kids().trim()}\n\n`;
+
+      // Empty paragraph = an intentional blank line (user pressed Enter). Markdown
+      // collapses blank lines, so preserve it as an explicit <br> that round-trips.
+      case 'p': { const c = kids().trim(); return c ? c + '\n\n' : '<br>\n\n'; }
+
+      case 'div': {
+        const html = node.innerHTML.trim();
+        if (html === '' || html === '<br>') return '<br>\n\n';
+        const c = kids();
+        return c.endsWith('\n\n') ? c : (c.endsWith('\n') ? c + '\n' : c + '\n\n');
+      }
+
+      case 'br': return '\n';
+
+      case 'strong': case 'b': { const c = kids(); return c.trim() ? `**${c}**` : ''; }
+      case 'em':     case 'i': { const c = kids(); return c.trim() ? `*${c}*`   : ''; }
+      case 'del': case 's': case 'strike': { const c = kids(); return c.trim() ? `~~${c}~~` : ''; }
+      case 'u': return kids();
+
+      case 'code': {
+        if (node.closest('pre')) return node.textContent;
+        return `\`${node.textContent}\``;
+      }
+      case 'pre': {
+        const codeEl = node.querySelector('code');
+        const lang = codeEl ? codeEl.className.replace(/lang-|language-/g,'').trim() : '';
+        const code = (codeEl || node).textContent;
+        return `\n\`\`\`${lang}\n${code.trim()}\n\`\`\`\n\n`;
+      }
+
+      case 'blockquote': {
+        const c = kids().trim();
+        return '\n' + c.split('\n').map(l => `> ${l}`).join('\n') + '\n\n';
+      }
+
+      case 'ul': case 'ol': return '\n' + listToMd(node, 0) + '\n';
+      case 'li': return kids(); // standalone <li> (outside a list) — emit its content
+
+      case 'a': { const href = node.getAttribute('href') || ''; return `[${kids()}](${href})`; }
+      case 'img': {
+        const src = node.getAttribute('src') || '', alt = node.getAttribute('alt') || '';
+        // Persist a resized size as a "=WxH" title so it round-trips (Markdown has no size syntax).
+        const w = parseInt(node.getAttribute('width') || node.style.width, 10);
+        const h = parseInt(node.getAttribute('height') || node.style.height, 10);
+        const size = w ? ` "=${w}x${h || ''}"` : '';
+        return `![${alt}](${src}${size})`;
+      }
+
+      case 'hr': return '\n---\n\n';
+      case 'table': return '\n' + tableToMd(node) + '\n';
+      case 'thead': case 'tbody': case 'tfoot': case 'tr': return kids();
+      case 'th': case 'td': return kids();
+
+      case 'span': {
+        let text = kids();
+        const s = node.style;
+        if (+s.fontWeight >= 700 || s.fontWeight === 'bold') text = `**${text}**`;
+        if (s.fontStyle === 'italic') text = `*${text}*`;
+        if (s.textDecoration && s.textDecoration.includes('line-through')) text = `~~${text}~~`;
+        if (s.color && text.trim()) text = `<span style="color:${s.color}">${text}</span>`;
+        if (s.backgroundColor && text.trim() && !_isNoHighlight(s.backgroundColor)) text = `<span style="background-color:${s.backgroundColor}">${text}</span>`;
+        return text;
+      }
+      case 'font': {
+        const text = kids();
+        const col = node.getAttribute('color');
+        return col && text.trim() ? `<span style="color:${col}">${text}</span>` : text;
+      }
+
+      case 'input': case 'head': case 'script': case 'style': return '';
+      default: return kids();
+    }
+  }
+
+  return walk(rootEl).replace(/\n{3,}/g, '\n\n').replace(/^\n+/,'').trimEnd() + '\n';
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  Editor
+// ═══════════════════════════════════════════════════════════════════════════════
+const srcEl      = document.getElementById('source');
+const rtEl       = document.getElementById('richtext');
+const fileNameEl = document.getElementById('filename');
+const lblSrc     = document.getElementById('lbl-source');
+const lblRt      = document.getElementById('lbl-richtext');
+
+let fileHandle       = null;
+let lastSavedContent = null;
+let dirty            = false;
+let renderTid;
+let rtSyncTid;
+let activePane = 'source'; // 'source' | 'richtext'
+let syncing    = false;    // true while we are programmatically writing to rtEl
+
+// ── PlantUML local SVG renderer ───────────────────────────────────────────────
+function renderPumlSVG(src) {
+  // ── Parse entities ──────────────────────────────────────────────────────────
+  const entities = {}, relations = [];
+  const eRx = /entity\s+(\w+)\s*\{([^}]*)\}/g;
+  let m;
+  while ((m = eRx.exec(src)) !== null) {
+    const rows = [];
+    for (const raw of m[2].split('\n')) {
+      const t = raw.trim();
+      if (!t) continue;
+      if (t === '--') { rows.push({ sep: true }); continue; }
+      const isPK = /<<PK>>/.test(t), isFK = /<<FK>>/.test(t);
+      rows.push({ sep: false, name: t.replace(/^\*\s*/, '').replace(/\s*<<[^>]+>>/g, '').trim(), isPK, isFK });
+    }
+    entities[m[1]] = { rows };
+  }
+  const rRx = /(\w+)(?:::(\w+))?\s*\|\|--o\{\s*(\w+)(?:::(\w+))?/g;
+  while ((m = rRx.exec(src)) !== null)
+    relations.push({ from: m[1], fromField: m[2], to: m[3], toField: m[4] });
+
+  const eNames = Object.keys(entities);
+  if (!eNames.length) return '<em style="color:#888">No entities found.</em>';
+
+  // ── Compute column depths (left = PK providers, right = FK holders) ─────────
+  const depth = {}; eNames.forEach(n => depth[n] = 0);
+  let chg = true;
+  while (chg) { chg = false; for (const r of relations) { if (depth[r.from] !== undefined && depth[r.to] !== undefined && depth[r.to] < depth[r.from] + 1) { depth[r.to] = depth[r.from] + 1; chg = true; } } }
+
+  const cols = {};
+  eNames.forEach(n => { const d = depth[n]; (cols[d] = cols[d] || []).push(n); });
+  const maxDepth = Math.max(...Object.keys(cols).map(Number));
+
+  // ── Metrics ─────────────────────────────────────────────────────────────────
+  const EW = 190, COL_GAP = 80, ROW_H = 22, SEP_H = 10, HDR = 30, VGAP = 20, PAD = 24;
+  const eH = n => HDR + entities[n].rows.reduce((s, r) => s + (r.sep ? SEP_H : ROW_H), 0);
+
+  // ── Assign pixel positions ───────────────────────────────────────────────────
+  const pos = {};
+  for (let c = 0; c <= maxDepth; c++) {
+    const ents = cols[c] || [], cx = PAD + c * (EW + COL_GAP);
+    let cy = PAD;
+    for (const n of ents) {
+      const h = eH(n), rowYs = {};
+      let ry = HDR;
+      for (const row of entities[n].rows) { if (row.sep) { ry += SEP_H; continue; } rowYs[row.name] = ry + ROW_H / 2; ry += ROW_H; }
+      pos[n] = { x: cx, y: cy, h, rowYs };
+      cy += h + VGAP;
+    }
+  }
+
+  const W = PAD + (maxDepth + 1) * (EW + COL_GAP) - COL_GAP + PAD;
+  const H = Math.max(...Object.values(pos).map(p => p.y + p.h)) + PAD;
+
+  let o = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" style="max-width:100%;display:block;font-family:system-ui,sans-serif;">`;
+
+  // ── Relation lines (drawn behind entities) ───────────────────────────────────
+  for (const r of relations) {
+    const fp = pos[r.from], tp = pos[r.to]; if (!fp || !tp) continue;
+    const pkRow = entities[r.from].rows.find(row => !row.sep && row.isPK);
+    const y1 = fp.y + (r.fromField && fp.rowYs[r.fromField] != null ? fp.rowYs[r.fromField] : pkRow ? fp.rowYs[pkRow.name] : fp.h / 2);
+    const y2 = tp.y + (r.toField   && tp.rowYs[r.toField]   != null ? tp.rowYs[r.toField]   : tp.h / 2);
+    const x1 = fp.x + EW, x2 = tp.x, cx = (x1 + x2) / 2;
+
+    o += `<path d="M${x1},${y1} C${cx},${y1} ${cx},${y2} ${x2},${y2}" fill="none" stroke="#aaa" stroke-width="1.4"/>`;
+    // || at PK end
+    o += `<line x1="${x1+3}" y1="${y1-5}" x2="${x1+3}" y2="${y1+5}" stroke="#777" stroke-width="1.5"/>`;
+    o += `<line x1="${x1+6}" y1="${y1-5}" x2="${x1+6}" y2="${y1+5}" stroke="#777" stroke-width="1.5"/>`;
+    // o{ at FK end — circle + crow's foot
+    o += `<circle cx="${x2-7}" cy="${y2}" r="3.5" fill="#fff" stroke="#777" stroke-width="1.3"/>`;
+    o += `<line x1="${x2-3}" y1="${y2}" x2="${x2}" y2="${y2-5}" stroke="#777" stroke-width="1.3"/>`;
+    o += `<line x1="${x2-3}" y1="${y2}" x2="${x2}" y2="${y2+5}" stroke="#777" stroke-width="1.3"/>`;
+    o += `<line x1="${x2-3}" y1="${y2}" x2="${x2}" y2="${y2}"   stroke="#777" stroke-width="1.3"/>`;
+  }
+
+  // ── Entity boxes ─────────────────────────────────────────────────────────────
+  for (const [n, e] of Object.entries(entities)) {
+    const p = pos[n]; if (!p) continue;
+    const { x, y, h } = p;
+    o += `<rect x="${x+2}" y="${y+2}" width="${EW}" height="${h}" rx="5" fill="rgba(0,0,0,0.07)"/>`;
+    o += `<rect x="${x}" y="${y}" width="${EW}" height="${h}" rx="5" fill="#fff" stroke="#bbb" stroke-width="1.2"/>`;
+    o += `<rect x="${x}" y="${y}" width="${EW}" height="${HDR}" rx="5" fill="#1e3a5f"/>`;
+    o += `<rect x="${x}" y="${y+HDR-5}" width="${EW}" height="5" fill="#1e3a5f"/>`;
+    o += `<text x="${x+EW/2}" y="${y+HDR/2+5}" text-anchor="middle" fill="#fff" font-weight="bold" font-size="12">${n}</text>`;
+    let ry = y + HDR;
+    for (const row of e.rows) {
+      if (row.sep) { o += `<line x1="${x+1}" y1="${ry+SEP_H/2}" x2="${x+EW-1}" y2="${ry+SEP_H/2}" stroke="#eee" stroke-width="1"/>`; ry += SEP_H; continue; }
+      if (row.isPK) o += `<rect x="${x+1}" y="${ry}" width="${EW-2}" height="${ROW_H}" fill="#fef9e7"/>`;
+      const ty = ry + ROW_H / 2 + 4;
+      if (row.isPK) {
+        o += `<rect x="${x+6}" y="${ry+5}" width="22" height="13" rx="2" fill="#b8860b"/>`;
+        o += `<text x="${x+17}" y="${ry+15}" text-anchor="middle" fill="#fff" font-size="9" font-weight="bold">PK</text>`;
+        o += `<text x="${x+32}" y="${ty}" fill="#333" font-size="11">${row.name}</text>`;
+      } else if (row.isFK) {
+        o += `<rect x="${x+6}" y="${ry+5}" width="22" height="13" rx="2" fill="#2a5fa5"/>`;
+        o += `<text x="${x+17}" y="${ry+15}" text-anchor="middle" fill="#fff" font-size="9" font-weight="bold">FK</text>`;
+        o += `<text x="${x+32}" y="${ty}" fill="#555" font-size="11">${row.name}</text>`;
+      } else {
+        o += `<text x="${x+8}" y="${ty}" fill="#333" font-size="11">${row.name}</text>`;
+      }
+      ry += ROW_H;
+    }
+  }
+
+  o += '</svg>';
+  return o;
+}
+
+function _renderPuml(el) {
+  try {
+    const src = decodeURIComponent(escape(atob(el.dataset.src)));
+    const wrap = document.createElement('div');
+    wrap.className = 'puml-img';
+    wrap.innerHTML = renderPumlSVG(src);
+    el.replaceWith(wrap);
+  } catch(err) { el.innerHTML = '<span style="color:#c00">⚠ Diagram render error</span>'; }
+}
+
+// ── Worker response handler ───────────────────────────────────────────────────
+_mdWorker.onmessage = function(e) {
+  if (e.data.id !== _renderId) return; // discard stale render
+  syncing = true;
+  rtEl.innerHTML = e.data.html ||
+    '<p style="color:#c00;padding:20px">⚠ Rich text rendering failed for this file.</p>';
+  rtEl.querySelectorAll('.puml-pending[data-src]').forEach(_renderPuml);
+  _rszHide();   // any tracked image node was just replaced by this re-render
+  Promise.resolve().then(() => { syncing = false; });
+};
+_mdWorker.onerror = function() {
+  rtEl.innerHTML = '<p style="color:#c00;padding:20px">⚠ Worker error — rich text unavailable.</p>';
+};
+
+// ── Render helpers ────────────────────────────────────────────────────────────
+function scheduleRender() {
+  clearTimeout(renderTid);
+  renderTid = setTimeout(() => {
+    const id = ++_renderId;
+    // Show a lightweight loading hint for large files while worker parses
+    if (srcEl.value.length > 15000) {
+      syncing = true;
+      rtEl.innerHTML = '<p style="color:#aaa;padding:20px;font-style:italic">Rendering…</p>';
+      Promise.resolve().then(() => { syncing = false; });
+    }
+    _mdWorker.postMessage({ md: srcEl.value, id });
+  }, 150);
+}
+function syncRtToSrc() {
+  srcEl.value = domToMd(rtEl);
+}
+function scheduleSyncRtToSrc() {
+  clearTimeout(rtSyncTid);
+  rtSyncTid = setTimeout(() => { syncRtToSrc(); updateStats(); }, 150);
+}
+function flushRtSync() {
+  if (rtSyncTid) { clearTimeout(rtSyncTid); rtSyncTid = null; syncRtToSrc(); }
+}
+
+// ── Pane label ────────────────────────────────────────────────────────────────
+function updatePaneLabels() {
+  lblSrc.classList.toggle('active', activePane === 'source');
+  lblRt.classList.toggle('active', activePane === 'richtext');
+  lblRt.textContent = activePane === 'richtext' ? 'Rich Text' : 'Rich Text (click to edit)';
+}
+
+// ── Stats ─────────────────────────────────────────────────────────────────────
+function updateStats() {
+  const v = srcEl.value;
+  document.getElementById('st-words').textContent = 'Words: ' + (v.trim() ? v.trim().split(/\s+/).length : 0);
+  document.getElementById('st-chars').textContent = 'Chars: ' + v.length;
+  document.getElementById('st-lines').textContent = 'Lines: ' + v.split('\n').length;
+}
+function updateCursor() {
+  const before = srcEl.value.slice(0, srcEl.selectionStart).split('\n');
+  document.getElementById('st-cursor').textContent = `Ln ${before.length}, Col ${before[before.length-1].length+1}`;
+}
+function setDirty(v) {
+  dirty = v;
+  fileNameEl.textContent = (fileHandle ? fileHandle.name : 'untitled.md') + (dirty ? ' •' : '');
+  updateRevertBtn();
+}
+function updateRevertBtn() {
+  const btn = document.getElementById('btn-refresh');
+  const canRefresh = fileHandle !== null;
+  btn.style.opacity = canRefresh ? '1'      : '0.4';
+  btn.style.cursor  = canRefresh ? 'pointer' : 'default';
+}
+
+// ── Undo history ──────────────────────────────────────────────────────────────
+const MAX_UNDO = 5;
+const _undo = { stack: [], redo: [], current: '', active: false, timer: null };
+function _undoPush(v) {
+  _undo.redo.length = 0;   // any genuine new edit invalidates the redo history
+  if (_undo.stack.length && _undo.stack[_undo.stack.length-1] === v) return;
+  _undo.stack.push(v);
+  if (_undo.stack.length > MAX_UNDO) _undo.stack.shift();
+}
+// Call at the start of any user-typed edit (snapshots the pre-edit state once per burst)
+function _undoOnChange() {
+  if (!_undo.active) { _undo.active = true; _undoPush(_undo.current); }
+  clearTimeout(_undo.timer);
+  _undo.timer = setTimeout(() => { _undo.current = srcEl.value; _undo.active = false; }, 800);
+}
+// Call before a toolbar action modifies srcEl.value
+function _undoToolbar() {
+  clearTimeout(_undo.timer); _undo.timer = null; _undo.active = false;
+  _undoPush(srcEl.value);
+}
+// Call after a toolbar action has finished updating srcEl.value
+function _undoAfterToolbar() { _undo.current = srcEl.value; }
+// Call when a whole new document is loaded (open/reload) — undo history tracks edits
+// to the current document only, so loading a file is NOT an undoable step.
+function _undoReset() {
+  clearTimeout(_undo.timer); _undo.timer = null; _undo.active = false;
+  _undo.stack.length = 0; _undo.redo.length = 0;
+  _undo.current = srcEl.value;
+}
+function undo() {
+  if (!_undo.stack.length) return;
+  clearTimeout(_undo.timer); _undo.timer = null; _undo.active = false;
+  _undo.redo.push(_undo.current);              // remember the state we're leaving so redo can return to it
+  if (_undo.redo.length > MAX_UNDO) _undo.redo.shift();
+  const prev = _undo.stack.pop();
+  _undo.current = prev;
+  srcEl.value = prev;
+  setDirty(lastSavedContent !== prev);
+  updateStats(); scheduleRender(); updateCursor();
+}
+function redo() {
+  if (!_undo.redo.length) return;
+  clearTimeout(_undo.timer); _undo.timer = null; _undo.active = false;
+  _undo.stack.push(_undo.current);             // push directly (not _undoPush, which would clear the redo stack)
+  if (_undo.stack.length > MAX_UNDO) _undo.stack.shift();
+  const next = _undo.redo.pop();
+  _undo.current = next;
+  srcEl.value = next;
+  setDirty(lastSavedContent !== next);
+  updateStats(); scheduleRender(); updateCursor();
+}
+// Fallback Ctrl+Z / Ctrl+Y when focus has left the editor (e.g. after a save dialog steals
+// it) — the per-pane handlers cover the focused-pane case, so defer to them when active.
+document.addEventListener('keydown', e => {
+  if (!e.ctrlKey) return;
+  const ae = document.activeElement;
+  if (ae === srcEl || ae === rtEl) return;     // their own keydown handlers already handle it
+  const k = e.key.toLowerCase();
+  if (!e.shiftKey && k === 'z') { e.preventDefault(); undo(); }
+  else if (k === 'y' || (e.shiftKey && k === 'z')) { e.preventDefault(); redo(); }
+});
+
+// ── Focus tracking ────────────────────────────────────────────────────────────
+srcEl.addEventListener('focus', () => {
+  if (activePane === 'richtext') {
+    flushRtSync();    // finalize any pending richtext→source sync
+    scheduleRender(); // then normalize richtext display from source
+  }
+  activePane = 'source';
+  updatePaneLabels();
+});
+rtEl.addEventListener('focus', () => {
+  activePane = 'richtext';
+  updatePaneLabels();
+});
+
+// ── Prevent toolbar from stealing richtext selection ─────────────────────────
+document.querySelectorAll('#toolbar .btn').forEach(btn => {
+  btn.addEventListener('mousedown', e => {
+    if (activePane === 'richtext') e.preventDefault();
+  });
+});
+
+// ── Source events ─────────────────────────────────────────────────────────────
+srcEl.addEventListener('input', () => { _undoOnChange(); setDirty(true); updateStats(); scheduleRender(); });
+srcEl.addEventListener('keyup',  updateCursor);
+srcEl.addEventListener('click',  updateCursor);
+srcEl.addEventListener('keydown', e => {
+  if (e.key === 'Tab') {
+    e.preventDefault();
+    const s = srcEl.selectionStart, end = srcEl.selectionEnd;
+    srcEl.value = srcEl.value.slice(0,s) + '  ' + srcEl.value.slice(end);
+    srcEl.selectionStart = srcEl.selectionEnd = s + 2;
+    scheduleRender();
+  }
+  if (e.ctrlKey && e.key === 's') { e.preventDefault(); saveFile(); }
+  if (e.ctrlKey && e.key === 'o') { e.preventDefault(); openFile(); }
+  if (e.ctrlKey && e.key === 'b') { e.preventDefault(); fmtWrap('**','**'); }
+  if (e.ctrlKey && e.key === 'i') { e.preventDefault(); fmtWrap('*','*'); }
+  if (e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); }
+  if (e.ctrlKey && (e.key.toLowerCase() === 'y' || (e.shiftKey && e.key.toLowerCase() === 'z'))) { e.preventDefault(); redo(); }
+});
+// Paste a clipboard image as embedded Markdown; plain text falls through to default paste.
+srcEl.addEventListener('paste', e => {
+  const img = clipboardImageFile(e.clipboardData);
+  if (img) { e.preventDefault(); embedImageFromBlob(img, 'source'); }
+});
+
+// ── Rich text events ──────────────────────────────────────────────────────────
+rtEl.addEventListener('input', () => {
+  if (syncing || activePane !== 'richtext') return;
+  _undoOnChange(); // srcEl.value still holds pre-sync state here — correct snapshot timing
+  setDirty(true);
+  scheduleSyncRtToSrc();
+});
+rtEl.addEventListener('keydown', e => {
+  if (e.ctrlKey && e.key === 's') { e.preventDefault(); saveFile(); }
+  if (e.ctrlKey && e.key === 'o') { e.preventDefault(); openFile(); }
+  if (e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); }
+  if (e.ctrlKey && (e.key.toLowerCase() === 'y' || (e.shiftKey && e.key.toLowerCase() === 'z'))) { e.preventDefault(); redo(); }
+});
+
+// Paste: embed a clipboard image if present; otherwise strip HTML to plain text
+rtEl.addEventListener('paste', e => {
+  e.preventDefault();
+  const img = clipboardImageFile(e.clipboardData);
+  if (img) { embedImageFromBlob(img, 'richtext'); return; }
+  const text = e.clipboardData.getData('text/plain');
+  document.execCommand('insertText', false, text);
+});
+
+// ── Splitter ──────────────────────────────────────────────────────────────────
+const splitter = document.getElementById('splitter');
+const srcPane  = document.getElementById('source-pane');
+const mainEl   = document.getElementById('main');
+let dragging   = false;
+
+splitter.addEventListener('mousedown', e => {
+  if (srcHidden) { toggleSrcPane(); return; }      // click collapsed strip → expand
+  if (e.target === collapseBtn) return;            // button handles itself
+  dragging = true; splitter.classList.add('active'); e.preventDefault();
+});
+document.addEventListener('mousemove', e => {
+  if (!dragging) return;
+  const r = mainEl.getBoundingClientRect();
+  const w = Math.max(120, Math.min(r.width-125, e.clientX-r.left));
+  srcPane.style.width = w + 'px'; srcPane.style.flex = 'none';
+});
+document.addEventListener('mouseup', () => { if (dragging) { dragging = false; splitter.classList.remove('active'); }});
+
+// ── Source pane collapse/expand ───────────────────────────────────────────────
+let srcHidden    = false;
+let lastSrcWidth = null;
+const collapseBtn = document.getElementById('collapse-btn');
+
+function toggleSrcPane() {
+  srcHidden = !srcHidden;
+  if (srcHidden) {
+    lastSrcWidth = srcPane.style.width || null;
+    srcPane.style.display = 'none';
+    splitter.classList.add('src-hidden');
+    collapseBtn.textContent = '▶';
+    collapseBtn.title = 'Show source pane';
+    if (activePane === 'source') { activePane = 'richtext'; updatePaneLabels(); rtEl.focus(); }
+  } else {
+    srcPane.style.display = '';
+    if (lastSrcWidth) { srcPane.style.width = lastSrcWidth; srcPane.style.flex = 'none'; }
+    splitter.classList.remove('src-hidden');
+    collapseBtn.textContent = '◀';
+    collapseBtn.title = 'Hide source pane';
+  }
+}
+
+collapseBtn.addEventListener('mousedown', e => e.stopPropagation()); // prevent drag start
+collapseBtn.addEventListener('click',     e => { e.stopPropagation(); toggleSrcPane(); });
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  Toolbar — works in both panes
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// execCommand helper for richtext pane
+function rtExec(cmd, val) {
+  _undoToolbar();
+  rtEl.focus();
+  try { document.execCommand(cmd, false, val !== undefined ? val : null); } catch(e){}
+  syncRtToSrc();
+  _undoAfterToolbar();
+  setDirty(true);
+  updateStats();
+}
+
+// Inline code wrap in richtext via Selection API
+function rtWrapCode() {
+  const sel = window.getSelection();
+  if (!sel.rangeCount) return;
+  const range = sel.getRangeAt(0);
+  const text  = sel.toString() || 'code';
+  const code  = Object.assign(document.createElement('code'), { textContent: text });
+  range.deleteContents();
+  range.insertNode(code);
+  const nr = document.createRange();
+  nr.setStartAfter(code); nr.collapse(true);
+  sel.removeAllRanges(); sel.addRange(nr);
+  _undoToolbar();
+  syncRtToSrc(); _undoAfterToolbar(); setDirty(true); updateStats();
+}
+
+// ── Bold / Italic / Strikethrough / Code ─────────────────────────────────────
+function fmtWrap(before, after) {
+  if (activePane === 'richtext') {
+    if (before === '**') { rtExec('bold');          return; }
+    if (before === '*')  { rtExec('italic');        return; }
+    if (before === '~~') { rtExec('strikethrough'); return; }
+    if (before === '`')  { rtWrapCode();            return; }
+  }
+  _undoToolbar();
+  const s = srcEl.selectionStart, e = srcEl.selectionEnd;
+  const sel = srcEl.value.slice(s, e) || 'text';
+  const rep = before + sel + after;
+  srcEl.value = srcEl.value.slice(0,s) + rep + srcEl.value.slice(e);
+  srcEl.selectionStart = s + before.length;
+  srcEl.selectionEnd   = s + before.length + sel.length;
+  _undoAfterToolbar(); srcEl.focus(); setDirty(true); scheduleRender();
+}
+
+// ── Headings ──────────────────────────────────────────────────────────────────
+function insertHeading(level) {
+  if (activePane === 'richtext') { rtExec('formatBlock', `H${level}`); return; }
+  _undoToolbar();
+  const prefix = '#'.repeat(level) + ' ';
+  const s = srcEl.selectionStart;
+  const ls = srcEl.value.lastIndexOf('\n', s-1) + 1;
+  const cleaned = srcEl.value.slice(ls).replace(/^#{1,6}\s/, '');
+  srcEl.value = srcEl.value.slice(0, ls) + prefix + cleaned;
+  srcEl.selectionStart = srcEl.selectionEnd = ls + prefix.length;
+  _undoAfterToolbar(); srcEl.focus(); setDirty(true); scheduleRender();
+}
+
+// ── Lists / Quote ─────────────────────────────────────────────────────────────
+function fmtList(type) {
+  if (activePane === 'richtext') {
+    if (type === 'ul')    { rtExec('insertUnorderedList'); return; }
+    if (type === 'ol')    {
+      rtExec('insertOrderedList');
+      // Start fresh at 1 — don't inherit a continuation from a previous list
+      const sel = window.getSelection();
+      if (sel.rangeCount) {
+        let n = sel.getRangeAt(0).commonAncestorContainer;
+        if (n.nodeType === 3) n = n.parentElement;
+        const ol = n && n.closest ? n.closest('ol') : null;
+        if (ol) {
+          // Chrome's insertOrderedList sometimes nests the new list inside the
+          // previous list item ("one level lower"). Lift it back to the top level.
+          if (ol.parentElement && ol.parentElement.closest('li')) {
+            let topOl = ol;
+            while (topOl.parentElement && topOl.parentElement.closest('ol')) {
+              topOl = topOl.parentElement.closest('ol');
+            }
+            topOl.parentNode.insertBefore(ol, topOl.nextSibling);
+            const li = ol.querySelector('li');
+            if (li) { const r = document.createRange(); r.selectNodeContents(li); r.collapse(false); sel.removeAllRanges(); sel.addRange(r); }
+          }
+          ol.removeAttribute('start'); ol.style.counterReset = '';  // let CSS reset its level counter
+          syncRtToSrc();
+        }
+      }
+      return;
+    }
+    if (type === 'quote') { rtExec('formatBlock','BLOCKQUOTE'); return; }
+    if (type === 'task')  {
+      rtExec('insertHTML', '<ul><li class="task-item"><input type="checkbox">&nbsp;Task</li></ul>');
+      return;
+    }
+  }
+  _undoToolbar();
+  const prefixMap = { ul: '- ', ol: '1. ', task: '- [ ] ', quote: '> ' };
+  const prefix = prefixMap[type];
+  const s = srcEl.selectionStart, v = srcEl.value;
+  const ls = v.lastIndexOf('\n', s-1) + 1;
+  const ins = '\n' + prefix;
+  srcEl.value = v.slice(0, ls) + ins + v.slice(ls);
+  srcEl.selectionStart = srcEl.selectionEnd = ls + ins.length;
+  _undoAfterToolbar(); srcEl.focus(); setDirty(true); scheduleRender();
+}
+
+// ── List level (indent / outdent) ─────────────────────────────────────────────
+// dir > 0 increases nesting (indent), dir < 0 decreases it (outdent). Max 5 levels.
+const MAX_LIST_LEVEL = 5;                 // levels 1..5  →  source indent 0,2,4,6,8
+
+// Nesting depth of the current rich-text list item (1 = top level)
+function rtListDepth() {
+  const sel = window.getSelection();
+  if (!sel.rangeCount) return 0;
+  let node = sel.getRangeAt(0).commonAncestorContainer;
+  if (node.nodeType === 3) node = node.parentElement;
+  let depth = 0, li = node && node.closest ? node.closest('li') : null;
+  while (li) { depth++; li = li.parentElement ? li.parentElement.closest('li') : null; }
+  return depth;
+}
+
+function listIndent(dir) {
+  if (activePane === 'richtext') {
+    if (dir > 0 && rtListDepth() >= MAX_LIST_LEVEL) return;  // already 5 levels deep
+    rtExec(dir > 0 ? 'indent' : 'outdent');
+    return;
+  }
+  _undoToolbar();
+  const v = srcEl.value, s = srcEl.selectionStart, e = srcEl.selectionEnd;
+  const lineStart = v.lastIndexOf('\n', s - 1) + 1;
+  let lineEnd = v.indexOf('\n', e);
+  if (lineEnd === -1) lineEnd = v.length;
+  const maxIndent = (MAX_LIST_LEVEL - 1) * 2;  // 8 spaces
+
+  let total = 0, firstDelta = 0;
+  const out = v.slice(lineStart, lineEnd).split('\n').map((line, i) => {
+    if (dir > 0) {                               // indent: add 2 leading spaces
+      const cur = line.match(/^[ \t]*/)[0].replace(/\t/g, '  ').length;
+      if (cur >= maxIndent) return line;         // capped at 5 levels — leave unchanged
+      if (i === 0) firstDelta = 2;
+      total += 2;
+      return '  ' + line;
+    }
+    const m = line.match(/^( {1,2}|\t)/);        // outdent: drop up to 2 spaces or a tab
+    const removed = m ? m[0].length : 0;
+    if (i === 0) firstDelta = -removed;
+    total -= removed;
+    return line.slice(removed);
+  }).join('\n');
+
+  srcEl.value = v.slice(0, lineStart) + out + v.slice(lineEnd);
+  srcEl.selectionStart = Math.max(lineStart, s + firstDelta);
+  srcEl.selectionEnd   = Math.max(lineStart, e + total);
+  _undoAfterToolbar(); srcEl.focus(); setDirty(true); scheduleRender();
+}
+
+// ── Continue numbering — resume the current ordered list from the previous one ─
+function continueNumbering() {
+  if (activePane === 'richtext') {
+    const sel = window.getSelection();
+    if (!sel.rangeCount) return;
+    let node = sel.getRangeAt(0).commonAncestorContainer;
+    if (node.nodeType === 3) node = node.parentElement;
+    const ol = node && node.closest ? node.closest('ol') : null;
+    if (!ol) return;
+    const ols = Array.from(rtEl.querySelectorAll('ol'));
+    let prev = null;                              // nearest preceding ol that isn't an ancestor
+    for (let i = ols.indexOf(ol) - 1; i >= 0; i--) {
+      if (!ols[i].contains(ol)) { prev = ols[i]; break; }
+    }
+    if (!prev) return;
+    const prevStart = parseInt(prev.getAttribute('start'), 10) || 1;
+    const prevCount = Array.from(prev.children).filter(c => c.tagName === 'LI').length;
+    const next = prevStart + prevCount;           // last number of prev list + 1
+    _undoToolbar();
+    ol.setAttribute('start', next);
+    let depth = 0, pp = ol; while (pp) { if (pp.tagName === 'OL') depth++; pp = pp.parentElement; }
+    ol.style.counterReset = 'c' + Math.min(depth, 5) + ' ' + (next - 1);
+    syncRtToSrc(); _undoAfterToolbar(); setDirty(true); updateStats();
+    return;
+  }
+  // ── Source pane ──
+  const isList = l => /^\s*(\d+\.|[-*+])\s/.test(l);
+  const v = srcEl.value, pos = srcEl.selectionStart, lines = v.split('\n');
+  let off = 0, cur = 0;
+  for (let i = 0; i < lines.length; i++) {
+    if (off + lines[i].length >= pos) { cur = i; break; }
+    off += lines[i].length + 1;
+  }
+  const curMatch = lines[cur].match(/^(\s*)\d+\.\s/);
+  if (!curMatch) return;                          // cursor not on an ordered item
+  const baseIndent = curMatch[1].length;
+  let bStart = cur; while (bStart > 0 && isList(lines[bStart - 1])) bStart--;
+  let bEnd = cur;   while (bEnd < lines.length - 1 && isList(lines[bEnd + 1])) bEnd++;
+  let prevNum = null;                             // nearest ordered item above this block
+  for (let i = bStart - 1; i >= 0; i--) {
+    const mm = lines[i].match(/^\s*(\d+)\.\s/);
+    if (mm) { prevNum = parseInt(mm[1], 10); break; }
+  }
+  if (prevNum === null) return;                   // nothing to continue from
+  _undoToolbar();
+  let nextN = prevNum + 1;
+  for (let i = bStart; i <= bEnd; i++) {
+    const mm = lines[i].match(/^(\s*)(\d+)\.\s+/);
+    if (mm && mm[1].length === baseIndent) {
+      lines[i] = mm[1] + nextN + '. ' + lines[i].slice(mm[0].length);
+      nextN++;
+    }
+  }
+  srcEl.value = lines.join('\n');
+  srcEl.selectionStart = srcEl.selectionEnd = Math.min(pos, srcEl.value.length);
+  _undoAfterToolbar(); srcEl.focus(); setDirty(true); scheduleRender();
+}
+
+// ── Link ──────────────────────────────────────────────────────────────────────
+function fmtLink() {
+  if (activePane === 'richtext') {
+    const url = window.prompt('URL:', 'https://');
+    if (url) rtExec('createLink', url);
+    return;
+  }
+  _undoToolbar();
+  const s = srcEl.selectionStart, e = srcEl.selectionEnd;
+  const sel = srcEl.value.slice(s, e);
+  const rep = `[${sel || 'link text'}](url)`;
+  srcEl.value = srcEl.value.slice(0,s) + rep + srcEl.value.slice(e);
+  srcEl.selectionStart = s; srcEl.selectionEnd = s + rep.length;
+  _undoAfterToolbar(); srcEl.focus(); setDirty(true); scheduleRender();
+}
+
+// ── Image ─────────────────────────────────────────────────────────────────────
+let _imgPane = null, _imgPos = null, _imgRtRange = null;
+
+// Technical unique identifier for an inserted picture (used as alt text)
+function genImgId() {
+  return 'img_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+}
+
+// Capture cursor/selection the moment the Image button is pressed — before it
+// steals focus from the editor pane, which would reset selectionStart to 0.
+document.getElementById('img-btn').addEventListener('mousedown', () => {
+  _imgPane = activePane;
+  _imgPos  = srcEl.selectionStart;
+  if (activePane === 'richtext') {
+    const sel = window.getSelection();
+    _imgRtRange = sel.rangeCount ? sel.getRangeAt(0).cloneRange() : null;
+  } else {
+    _imgRtRange = null;
+  }
+});
+
+function toggleImgMenu(e) {
+  e.stopPropagation();
+  document.getElementById('open-menu').style.display = 'none';
+  const m = document.getElementById('img-menu');
+  m.style.display = m.style.display === 'block' ? 'none' : 'block';
+}
+document.addEventListener('click', () => {
+  const m = document.getElementById('img-menu');
+  if (m) m.style.display = 'none';
+});
+
+function fmtImageUrl() {
+  document.getElementById('img-menu').style.display = 'none';
+  if (_imgPane === 'richtext') {
+    const src = window.prompt('Image URL:', 'https://');
+    if (!src) return;
+    const alt = genImgId();
+    rtEl.focus();
+    if (_imgRtRange) { const s = window.getSelection(); s.removeAllRanges(); s.addRange(_imgRtRange); }
+    rtExec('insertHTML', `<img src="${src}" alt="${alt}">`);
+    return;
+  }
+  _undoToolbar();
+  const src = window.prompt('Image URL:', 'https://');
+  if (!src) { _undoAfterToolbar(); return; }
+  const alt = genImgId();
+  const rep = `![${alt}](${src})`;
+  const pos = _imgPos !== null ? _imgPos : srcEl.selectionStart;
+  srcEl.value = srcEl.value.slice(0, pos) + rep + srcEl.value.slice(pos);
+  srcEl.selectionStart = pos; srcEl.selectionEnd = pos + rep.length;
+  _undoAfterToolbar(); srcEl.focus(); setDirty(true); scheduleRender();
+}
+
+// _imgPane / _imgPos / _imgRtRange already captured by the img-btn mousedown above.
+// Just need _undoToolbar() here since the file dialog opens later (async).
+document.getElementById('img-embed-lbl').addEventListener('mousedown', () => {
+  _undoToolbar();
+});
+
+document.getElementById('img-input').addEventListener('change', e => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    const dataUrl = reader.result;
+    const alt = genImgId();
+    if (_imgPane === 'richtext') {
+      rtEl.focus();
+      if (_imgRtRange) { const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(_imgRtRange); _imgRtRange = null; }
+      try { document.execCommand('insertHTML', false, `<img src="${dataUrl}" alt="${alt}">`); } catch(err){}
+      syncRtToSrc(); _undoAfterToolbar(); setDirty(true); updateStats();
+    } else {
+      const pos = _imgPos !== null ? _imgPos : srcEl.selectionStart;
+      const md = `![${alt}](${dataUrl})`;
+      srcEl.value = srcEl.value.slice(0, pos) + md + srcEl.value.slice(pos);
+      srcEl.selectionStart = srcEl.selectionEnd = pos + md.length;
+      _undoAfterToolbar(); srcEl.focus(); setDirty(true); updateStats(); scheduleRender();
+    }
+  };
+  reader.readAsDataURL(file);
+});
+
+// ── Image from clipboard buffer (paste a screenshot / copied image) ───────────
+// Insert an image data URL at the current caret of the given pane, as one undoable step.
+function insertImageAtCaret(dataUrl, pane) {
+  const alt = genImgId();
+  _undoToolbar();
+  if (pane === 'richtext') {
+    rtEl.focus();
+    try { document.execCommand('insertHTML', false, `<img src="${dataUrl}" alt="${alt}">`); } catch(err){}
+    syncRtToSrc(); _undoAfterToolbar(); setDirty(true); updateStats();
+  } else {
+    const pos = srcEl.selectionStart;
+    const md  = `![${alt}](${dataUrl})`;
+    srcEl.value = srcEl.value.slice(0, pos) + md + srcEl.value.slice(pos);
+    srcEl.selectionStart = srcEl.selectionEnd = pos + md.length;
+    _undoAfterToolbar(); srcEl.focus(); setDirty(true); updateStats(); scheduleRender();
+  }
+}
+// Pull an image file out of a paste/drop event's clipboard (null if none).
+function clipboardImageFile(dt) {
+  if (!dt) return null;
+  for (const it of dt.items || []) {
+    if (it.kind === 'file' && it.type.startsWith('image/')) return it.getAsFile();
+  }
+  for (const f of dt.files || []) { if (f.type.startsWith('image/')) return f; }
+  return null;
+}
+function embedImageFromBlob(blob, pane) {
+  const reader = new FileReader();
+  reader.onload = () => insertImageAtCaret(reader.result, pane);
+  reader.readAsDataURL(blob);
+}
+
+// ── Image resize (richtext pane) ──────────────────────────────────────────────
+// Click an image to show a dashed box + bottom-right handle; drag the handle to
+// resize proportionally by width. Size persists via the "=WxH" title (see domToMd).
+const _rsz = { box: document.getElementById('img-rsz'), handle: document.getElementById('img-rsz-h'),
+               img: null, startX: 0, startW: 0, ratio: 1, dragging: false };
+
+function _rszPosition() {
+  if (!_rsz.img) return;
+  if (!_rsz.img.isConnected) { _rszHide(); return; }   // node replaced by a re-render
+  const r = _rsz.img.getBoundingClientRect();
+  // Hide if the image scrolled out of the richtext viewport
+  const pr = rtEl.getBoundingClientRect();
+  if (r.bottom < pr.top || r.top > pr.bottom) { _rsz.box.style.display = 'none'; return; }
+  _rsz.box.style.display = 'block';
+  _rsz.box.style.left   = r.left   + 'px';
+  _rsz.box.style.top    = r.top    + 'px';
+  _rsz.box.style.width  = r.width  + 'px';
+  _rsz.box.style.height = r.height + 'px';
+}
+function _rszSelect(img) {
+  _rsz.img = img;
+  _rszPosition();
+}
+function _rszHide() {
+  if (_rsz.dragging) return;
+  _rsz.img = null;
+  _rsz.box.style.display = 'none';
+}
+
+// Select an image on click inside the richtext pane
+rtEl.addEventListener('click', e => {
+  if (e.target && e.target.tagName === 'IMG') _rszSelect(e.target);
+  else _rszHide();
+});
+// Keep the overlay glued to the image as the pane scrolls / window resizes
+rtEl.addEventListener('scroll', _rszPosition, { passive: true });
+window.addEventListener('resize', _rszPosition);
+// Typing or re-rendering invalidates the selection (the img node may be replaced)
+rtEl.addEventListener('input', _rszHide);
+
+_rsz.handle.addEventListener('mousedown', e => {
+  if (!_rsz.img) return;
+  e.preventDefault(); e.stopPropagation();
+  flushRtSync();                        // make the source current before snapshotting
+  const r = _rsz.img.getBoundingClientRect();
+  _rsz.dragging = true;
+  _rsz.startX = e.clientX;
+  _rsz.startW = r.width;
+  _rsz.ratio  = r.height / r.width || 1;
+  _undoToolbar();                       // one undo step for the whole drag
+  document.body.style.userSelect = 'none';
+});
+document.addEventListener('mousemove', e => {
+  if (!_rsz.dragging) return;
+  let w = Math.round(_rsz.startW + (e.clientX - _rsz.startX));
+  w = Math.max(20, w);                  // floor so the image can't vanish
+  _rsz.img.setAttribute('width', w);
+  _rsz.img.removeAttribute('height');   // height auto-follows (preserve aspect ratio)
+  _rsz.img.style.removeProperty('width');
+  _rsz.img.style.removeProperty('height');
+  _rszPosition();
+});
+document.addEventListener('mouseup', () => {
+  if (!_rsz.dragging) return;
+  _rsz.dragging = false;
+  document.body.style.userSelect = '';
+  const img = _rsz.img;
+  syncRtToSrc();                        // write the new size into the source pane
+  _undoAfterToolbar(); setDirty(true); updateStats();
+  // re-render may rebuild the node; re-select the fresh one at the same position
+  _rsz.img = img && img.isConnected ? img : null;
+  _rszPosition();
+});
+
+// ── Table — insert N×M via dropdown (Rows count includes the header row) ──────
+let _tblPane = null, _tblPos = null, _tblRtRange = null;
+
+function toggleTblMenu(e) {
+  e.stopPropagation();
+  document.getElementById('img-menu').style.display = 'none'; // close sibling menu
+  document.getElementById('open-menu').style.display = 'none';
+  const m = document.getElementById('tbl-menu');
+  const opening = m.style.display !== 'block';
+  m.style.display = opening ? 'block' : 'none';
+  if (opening) {
+    const r = document.getElementById('tbl-rows');
+    setTimeout(() => { r.focus(); r.select(); }, 0);
+  }
+}
+
+function confirmCreateTable() {
+  const clamp = (v, lo, hi, dflt) => Math.max(lo, Math.min(hi, parseInt(v, 10) || dflt));
+  const rows = clamp(document.getElementById('tbl-rows').value, 1, 50, 2);
+  const cols = clamp(document.getElementById('tbl-cols').value, 1, 20, 3);
+  document.getElementById('tbl-menu').style.display = 'none';
+  createTable(rows, cols);
+}
+
+function createTable(rows, cols) {
+  if (_tblPane === 'richtext') {
+    let html = '<table><thead><tr>';
+    for (let c = 0; c < cols; c++) html += `<th>Column ${c + 1}</th>`;
+    html += '</tr></thead><tbody>';
+    for (let r = 1; r < rows; r++) {
+      html += '<tr>';
+      for (let c = 0; c < cols; c++) html += '<td>Cell</td>';
+      html += '</tr>';
+    }
+    html += '</tbody></table><p><br></p>';
+    const st = rtEl.scrollTop;
+    rtEl.focus();
+    if (_tblRtRange) { const s = window.getSelection(); s.removeAllRanges(); s.addRange(_tblRtRange); }
+    rtExec('insertHTML', html);
+    rtEl.scrollTop = st;            // keep the view where the cursor was
+    return;
+  }
+  _undoToolbar();
+  const matrix = [
+    Array.from({ length: cols }, (_, c) => `Column ${c + 1}`),
+    Array(cols).fill('---')
+  ];
+  for (let r = 1; r < rows; r++) matrix.push(Array(cols).fill('Cell'));
+  const tbl = '\n' + formatMdTable(matrix).join('\n') + '\n';
+  const pos = _tblPos !== null ? _tblPos : srcEl.selectionStart;
+  const st = srcEl.scrollTop;      // reassigning .value resets the textarea to top
+  srcEl.value = srcEl.value.slice(0, pos) + tbl + srcEl.value.slice(pos);
+  srcEl.selectionStart = srcEl.selectionEnd = pos + tbl.length;
+  _undoAfterToolbar(); srcEl.focus(); srcEl.scrollTop = st; setDirty(true); scheduleRender();
+}
+
+// Capture cursor/selection the moment the Table button is pressed — before the
+// dropdown / its inputs steal focus and reset the editor caret.
+document.getElementById('tbl-btn').addEventListener('mousedown', () => {
+  _tblPane = activePane;
+  _tblPos  = srcEl.selectionStart;
+  _tblRtRange = null;
+  if (activePane === 'richtext') {
+    const sel = window.getSelection();
+    _tblRtRange = sel.rangeCount ? sel.getRangeAt(0).cloneRange() : null;
+  }
+});
+
+// Custom dark steppers (white ▲▼) — adjust the target input within its min/max.
+document.querySelectorAll('#tbl-menu .num-btn').forEach(btn => {
+  btn.addEventListener('mousedown', e => e.preventDefault()); // keep focus in the field
+  btn.addEventListener('click', () => {
+    const input = document.getElementById(btn.dataset.target);
+    const min = +input.min, max = +input.max;
+    let v = (parseInt(input.value, 10) || min) + (btn.classList.contains('num-up') ? 1 : -1);
+    input.value = Math.max(min, Math.min(max, v));
+    input.focus();
+  });
+});
+
+// Enter confirms from either input; Escape or an outside click closes the menu.
+['tbl-rows', 'tbl-cols'].forEach(id => {
+  document.getElementById(id).addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); confirmCreateTable(); }
+  });
+});
+document.addEventListener('click', e => {
+  if (!e.target.closest('.tbl-wrap')) document.getElementById('tbl-menu').style.display = 'none';
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') document.getElementById('tbl-menu').style.display = 'none';
+});
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  Text color picker
+// ═══════════════════════════════════════════════════════════════════════════════
+const COLOR_SWATCHES = ['#e11d48','#ea580c','#ca8a04','#16a34a','#0891b2',
+                        '#2563eb','#7c3aed','#db2777','#111827','#6b7280'];
+let _colPane = null, _colSelStart = null, _colSelEnd = null, _colRtRange = null;
+let _curColor = '#e11d48';   // last-used color — applied by the left split button
+
+function toggleColorMenu(e) {
+  e.stopPropagation();
+  document.getElementById('img-menu').style.display = 'none';
+  document.getElementById('tbl-menu').style.display = 'none';
+  document.getElementById('hl-menu').style.display = 'none';
+  const m = document.getElementById('color-menu');
+  m.style.display = m.style.display === 'block' ? 'none' : 'block';
+}
+
+function applyCurrentColor() { applyColor(_curColor); }
+
+function applyColor(color) {
+  _curColor = color;
+  document.getElementById('color-menu').style.display = 'none';
+  document.getElementById('clr-bar').style.background = color;
+  if (_colPane === 'richtext') {
+    rtEl.focus();
+    if (_colRtRange) { const s = window.getSelection(); s.removeAllRanges(); s.addRange(_colRtRange); }
+    _undoToolbar();
+    try { document.execCommand('styleWithCSS', false, true);  } catch (e) {}
+    try { document.execCommand('foreColor', false, color);    } catch (e) {}
+    try { document.execCommand('styleWithCSS', false, false); } catch (e) {}
+    syncRtToSrc(); _undoAfterToolbar(); setDirty(true); updateStats();
+    return;
+  }
+  _undoToolbar();
+  const a = _colSelStart != null ? _colSelStart : srcEl.selectionStart;
+  const b = _colSelEnd   != null ? _colSelEnd   : srcEl.selectionEnd;
+  const sel = srcEl.value.slice(a, b) || 'text';
+  const rep = `<span style="color:${color}">${sel}</span>`;
+  srcEl.value = srcEl.value.slice(0, a) + rep + srcEl.value.slice(b);
+  srcEl.selectionStart = a; srcEl.selectionEnd = a + rep.length;
+  _undoAfterToolbar(); srcEl.focus(); setDirty(true); scheduleRender();
+}
+
+// Capture the selection the instant either split button is pressed (before focus moves).
+function captureColorTarget() {
+  _colPane = activePane;
+  _colSelStart = srcEl.selectionStart;
+  _colSelEnd   = srcEl.selectionEnd;
+  _colRtRange = null;
+  if (activePane === 'richtext') {
+    const sel = window.getSelection();
+    _colRtRange = sel.rangeCount ? sel.getRangeAt(0).cloneRange() : null;
+  }
+}
+document.getElementById('color-apply-btn').addEventListener('mousedown', captureColorTarget);
+document.getElementById('color-caret-btn').addEventListener('mousedown', captureColorTarget);
+
+// Build swatches + wire the custom picker
+(function initColorMenu() {
+  const grid = document.getElementById('clr-grid');
+  COLOR_SWATCHES.forEach(c => {
+    const sw = document.createElement('div');
+    sw.className = 'clr-sw'; sw.style.background = c; sw.title = c;
+    sw.addEventListener('mousedown', e => e.preventDefault()); // preserve editor selection
+    sw.addEventListener('click', () => applyColor(c));
+    grid.appendChild(sw);
+  });
+  const inp = document.getElementById('clr-input');
+  inp.addEventListener('change', () => applyColor(inp.value)); // 'change' fires once, when picker closes
+})();
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  Text highlight picker (background-color) — mirrors the text color picker
+// ═══════════════════════════════════════════════════════════════════════════════
+const HL_SWATCHES = ['#fde047','#fca5a5','#86efac','#93c5fd','#f9a8d4',
+                     '#fdba74','#d8b4fe','#67e8f9','#fef08a','#ffffff']; // white = unhighlight (matches page bg)
+let _curHl = '#fde047';   // last-used highlight — applied by the left split button
+
+function toggleHlMenu(e) {
+  e.stopPropagation();
+  document.getElementById('img-menu').style.display = 'none';
+  document.getElementById('tbl-menu').style.display = 'none';
+  document.getElementById('color-menu').style.display = 'none';
+  const m = document.getElementById('hl-menu');
+  m.style.display = m.style.display === 'block' ? 'none' : 'block';
+}
+
+function applyCurrentHl() { applyHl(_curHl); }
+
+function applyHl(color) {
+  const remove = _isNoHighlight(color);   // white swatch = unhighlight (remove the background)
+  _curHl = color;
+  document.getElementById('hl-menu').style.display = 'none';
+  document.getElementById('hl-letter').style.background = color;
+  if (_colPane === 'richtext') {
+    rtEl.focus();
+    if (_colRtRange) { const s = window.getSelection(); s.removeAllRanges(); s.addRange(_colRtRange); }
+    _undoToolbar();
+    try { document.execCommand('styleWithCSS', false, true);  } catch (e) {}
+    // 'transparent' clears the highlight; domToMd drops it so the markdown stays clean.
+    try { document.execCommand('hiliteColor', false, remove ? 'transparent' : color); } catch (e) {}
+    try { document.execCommand('styleWithCSS', false, false); } catch (e) {}
+    syncRtToSrc(); _undoAfterToolbar(); setDirty(true); updateStats();
+    return;
+  }
+  _undoToolbar();
+  const a = _colSelStart != null ? _colSelStart : srcEl.selectionStart;
+  const b = _colSelEnd   != null ? _colSelEnd   : srcEl.selectionEnd;
+  if (remove) {
+    // Strip any highlight spans inside the selection rather than painting white.
+    const cleaned = srcEl.value.slice(a, b)
+      .replace(/<span style="background-color:[^"]*">([\s\S]*?)<\/span>/gi, '$1');
+    srcEl.value = srcEl.value.slice(0, a) + cleaned + srcEl.value.slice(b);
+    srcEl.selectionStart = a; srcEl.selectionEnd = a + cleaned.length;
+  } else {
+    const sel = srcEl.value.slice(a, b) || 'text';
+    const rep = `<span style="background-color:${color}">${sel}</span>`;
+    srcEl.value = srcEl.value.slice(0, a) + rep + srcEl.value.slice(b);
+    srcEl.selectionStart = a; srcEl.selectionEnd = a + rep.length;
+  }
+  _undoAfterToolbar(); srcEl.focus(); setDirty(true); scheduleRender();
+}
+
+// Reuse captureColorTarget — it just snapshots the active pane + selection.
+document.getElementById('hl-apply-btn').addEventListener('mousedown', captureColorTarget);
+document.getElementById('hl-caret-btn').addEventListener('mousedown', captureColorTarget);
+
+(function initHlMenu() {
+  const grid = document.getElementById('hl-grid');
+  HL_SWATCHES.forEach(c => {
+    const sw = document.createElement('div');
+    sw.className = 'clr-sw'; sw.style.background = c;
+    sw.title = _isNoHighlight(c) ? 'Remove highlight' : c;
+    sw.addEventListener('mousedown', e => e.preventDefault());
+    sw.addEventListener('click', () => applyHl(c));
+    grid.appendChild(sw);
+  });
+  const inp = document.getElementById('hl-input');
+  inp.addEventListener('change', () => applyHl(inp.value));
+})();
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('.color-wrap')) {
+    document.getElementById('color-menu').style.display = 'none';
+    document.getElementById('hl-menu').style.display = 'none';
+  }
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    document.getElementById('color-menu').style.display = 'none';
+    document.getElementById('hl-menu').style.display = 'none';
+  }
+});
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  Clear formatting from the selection
+// ═══════════════════════════════════════════════════════════════════════════════
+function stripInlineMd(t) {
+  t = t.replace(/<span[^>]*>([\s\S]*?)<\/span>/gi, '$1');           // color / style spans
+  t = t.replace(/<\/?(?:strong|em|b|i|u|del|s|mark|font)[^>]*>/gi, ''); // stray inline tags
+  t = t.replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1');                   // image → alt
+  t = t.replace(/\[([^\]]+)\]\([^)]*\)/g, '$1');                    // link → text
+  t = t.replace(/\*\*\*([^*]+)\*\*\*/g, '$1').replace(/___([^_]+)___/g, '$1'); // bold+italic
+  t = t.replace(/\*\*([^*]+)\*\*/g, '$1').replace(/__([^_]+)__/g, '$1');       // bold
+  t = t.replace(/\*([^*]+)\*/g, '$1').replace(/_([^_]+)_/g, '$1');             // italic
+  t = t.replace(/~~([^~]+)~~/g, '$1');                             // strikethrough
+  t = t.replace(/`([^`]+)`/g, '$1');                              // inline code
+  return t;
+}
+
+function clearFormatting() {
+  if (activePane === 'richtext') {
+    _undoToolbar();
+    rtEl.focus();
+    try { document.execCommand('removeFormat'); } catch (e) {} // bold/italic/strike/color/underline
+    try { document.execCommand('unlink');       } catch (e) {} // links
+    syncRtToSrc(); _undoAfterToolbar(); setDirty(true); updateStats();
+    return;
+  }
+  const a = srcEl.selectionStart, b = srcEl.selectionEnd;
+  if (a === b) return;                       // nothing selected
+  _undoToolbar();
+  const cleaned = stripInlineMd(srcEl.value.slice(a, b));
+  srcEl.value = srcEl.value.slice(0, a) + cleaned + srcEl.value.slice(b);
+  srcEl.selectionStart = a; srcEl.selectionEnd = a + cleaned.length;
+  _undoAfterToolbar(); srcEl.focus(); setDirty(true); scheduleRender();
+}
+
+// ── Code block ────────────────────────────────────────────────────────────────
+function fmtCodeBlock() {
+  if (activePane === 'richtext') {
+    const sel = window.getSelection().toString() || 'code here';
+    rtExec('insertHTML', `<pre><code>${sel}</code></pre><p><br></p>`);
+    return;
+  }
+  _undoToolbar();
+  const s = srcEl.selectionStart, e = srcEl.selectionEnd;
+  const sel = srcEl.value.slice(s, e) || 'code here';
+  const rep = `\n\`\`\`\n${sel}\n\`\`\`\n`;
+  srcEl.value = srcEl.value.slice(0,s) + rep + srcEl.value.slice(e);
+  srcEl.selectionStart = s + 5;
+  srcEl.selectionEnd   = s + 5 + sel.length;
+  _undoAfterToolbar(); srcEl.focus(); setDirty(true); scheduleRender();
+}
+
+// ── Horizontal rule ───────────────────────────────────────────────────────────
+function fmtHR() {
+  if (activePane === 'richtext') { rtExec('insertHorizontalRule'); return; }
+  _undoToolbar();
+  const s = srcEl.selectionStart;
+  const hr = '\n\n---\n\n';
+  srcEl.value = srcEl.value.slice(0,s) + hr + srcEl.value.slice(s);
+  srcEl.selectionStart = srcEl.selectionEnd = s + hr.length;
+  _undoAfterToolbar(); srcEl.focus(); setDirty(true); scheduleRender();
+}
+
+// ── A4 page width ─────────────────────────────────────────────────────────────
+function toggleA4() {
+  const on = document.getElementById('richtext-pane').classList.toggle('a4');
+  document.getElementById('a4-btn').classList.toggle('active-toggle', on);
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  Table Tools
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ── Rich text helpers ─────────────────────────────────────────────────────────
+function getRtTableCtx() {
+  const sel = window.getSelection();
+  if (!sel.rangeCount) return null;
+  let node = sel.getRangeAt(0).commonAncestorContainer;
+  if (node.nodeType === 3) node = node.parentElement;
+  const cell  = node.closest('td, th');
+  const row   = node.closest('tr');
+  const table = node.closest('#richtext table');
+  if (!table || !row) return null;
+  const allRows = Array.from(table.querySelectorAll('tr'));
+  const colIdx  = cell ? Array.from(row.children).indexOf(cell) : 0;
+  return { table, row, cell, colIdx, allRows };
+}
+
+function afterRtMutation() {
+  syncRtToSrc(); setDirty(true); updateStats();
+}
+
+// Rebalance <colgroup> after column count changes
+function syncColgroup(table) {
+  const colgroup = table.querySelector('colgroup');
+  if (!colgroup) return;
+  const firstRow = table.querySelector('tr');
+  const ncols = firstRow ? firstRow.children.length : 0;
+  if (!ncols) return;
+  const pct = (100 / ncols).toFixed(2) + '%';
+  while (colgroup.firstChild) colgroup.removeChild(colgroup.firstChild);
+  for (let i = 0; i < ncols; i++) {
+    const col = document.createElement('col');
+    col.setAttribute('width', pct);
+    col.style.width = pct;
+    colgroup.appendChild(col);
+  }
+}
+
+// ── Source text helpers ───────────────────────────────────────────────────────
+function getSrcTableCtx() {
+  const pos   = srcEl.selectionStart;
+  const text  = srcEl.value;
+  const lines = text.split('\n');
+
+  // Locate cursor line
+  let offset = 0, cursorLine = lines.length - 1;
+  for (let i = 0; i < lines.length; i++) {
+    if (offset + lines[i].length >= pos) { cursorLine = i; break; }
+    offset += lines[i].length + 1;
+  }
+  if (!lines[cursorLine].includes('|')) return null;
+
+  // Expand to table boundaries (consecutive lines with |)
+  let tStart = cursorLine;
+  while (tStart > 0 && lines[tStart - 1].trim().includes('|')) tStart--;
+  let tEnd = cursorLine;
+  while (tEnd < lines.length - 1 && lines[tEnd + 1].trim().includes('|')) tEnd++;
+
+  const tableLines = lines.slice(tStart, tEnd + 1);
+  const cursorRow  = cursorLine - tStart;
+
+  // Count | chars before cursor within line to determine column index
+  const lineOffset = text.lastIndexOf('\n', pos - 1) + 1;
+  const posInLine  = pos - lineOffset;
+  const lineText   = lines[cursorLine];
+  let pipes = 0;
+  for (let i = 0; i < posInLine; i++) if (lineText[i] === '|') pipes++;
+  const colIdx = Math.max(0, lineText.trimStart().startsWith('|') ? pipes - 1 : pipes);
+
+  return { lines, tableLines, tStart, tEnd, cursorRow, colIdx };
+}
+
+// Parse markdown table lines into array-of-string-arrays
+function parseMdTable(tableLines) {
+  return tableLines.map(line =>
+    line.replace(/^\s*\|/, '').replace(/\|\s*$/, '').split('|').map(c => c.trim())
+  );
+}
+
+function isSepRow(cells) {
+  return cells.length > 0 && cells.every(c => /^:?-+:?$/.test(c) || c.trim() === '');
+}
+
+// Rebuild markdown table lines with aligned columns
+function formatMdTable(rows) {
+  const ncols  = Math.max(...rows.map(r => r.length));
+  const widths = Array(ncols).fill(3);
+  rows.forEach(row => {
+    row.forEach((cell, i) => { widths[i] = Math.max(widths[i] || 3, cell.length); });
+  });
+  return rows.map(row => {
+    const cells = Array.from({ length: ncols }, (_, i) => {
+      const c = (row[i] !== undefined ? row[i] : '').trim();
+      return isSepRow([c]) ? '-'.repeat(widths[i]) : c.padEnd(widths[i]);
+    });
+    return '| ' + cells.join(' | ') + ' |';
+  });
+}
+
+function applySrcTable(ctx, newRows) {
+  _undoToolbar();
+  const formatted = formatMdTable(newRows);
+  const lines = [...ctx.lines.slice(0, ctx.tStart), ...formatted, ...ctx.lines.slice(ctx.tEnd + 1)];
+  srcEl.value = lines.join('\n');
+  _undoAfterToolbar();
+  setDirty(true); updateStats(); scheduleRender();
+}
+
+// ── Add Row ───────────────────────────────────────────────────────────────────
+function tblAddRow() {
+  if (activePane === 'richtext') {
+    const ctx = getRtTableCtx();
+    if (!ctx) return;
+    const ncols = Math.max(...ctx.allRows.map(r => r.children.length));
+    const newTr = document.createElement('tr');
+    for (let i = 0; i < ncols; i++) {
+      const td = document.createElement('td');
+      newTr.appendChild(td);
+    }
+    ctx.row.insertAdjacentElement('afterend', newTr);
+    afterRtMutation(); return;
+  }
+  const ctx = getSrcTableCtx();
+  if (!ctx) return;
+  const rows = parseMdTable(ctx.tableLines);
+  const insertAfter = ctx.cursorRow <= 1 ? rows.length - 1 : ctx.cursorRow;
+  rows.splice(insertAfter + 1, 0, Array(rows[0].length).fill(''));
+  applySrcTable(ctx, rows);
+}
+
+// ── Delete Row ────────────────────────────────────────────────────────────────
+function tblDelRow() {
+  if (activePane === 'richtext') {
+    const ctx = getRtTableCtx();
+    if (!ctx) return;
+    // Don't delete thead row; require at least one tbody row
+    const tbodyRows = ctx.table.querySelectorAll('tbody tr');
+    if (!ctx.row.closest('tbody') || tbodyRows.length <= 1) return;
+    ctx.row.remove();
+    afterRtMutation(); return;
+  }
+  const ctx = getSrcTableCtx();
+  if (!ctx) return;
+  const rows = parseMdTable(ctx.tableLines);
+  if (ctx.cursorRow <= 1 || rows.length <= 3) return; // keep header + sep + 1 row
+  rows.splice(ctx.cursorRow, 1);
+  applySrcTable(ctx, rows);
+}
+
+// ── Add Column ────────────────────────────────────────────────────────────────
+function tblAddCol() {
+  if (activePane === 'richtext') {
+    const ctx = getRtTableCtx();
+    if (!ctx) return;
+    ctx.allRows.forEach((tr, ri) => {
+      const newCell = document.createElement(ri === 0 ? 'th' : 'td');
+      const ref = tr.children[ctx.colIdx + 1];
+      ref ? tr.insertBefore(newCell, ref) : tr.appendChild(newCell);
+    });
+    syncColgroup(ctx.table);
+    afterRtMutation(); return;
+  }
+  const ctx = getSrcTableCtx();
+  if (!ctx) return;
+  const rows = parseMdTable(ctx.tableLines);
+  const insertAt = ctx.colIdx + 1;
+  rows.forEach((row, ri) => {
+    const cell = isSepRow(row) ? '---' : '';
+    row.splice(insertAt, 0, cell);
+  });
+  applySrcTable(ctx, rows);
+}
+
+// ── Delete Column ─────────────────────────────────────────────────────────────
+function tblDelCol() {
+  if (activePane === 'richtext') {
+    const ctx = getRtTableCtx();
+    if (!ctx) return;
+    if (Math.min(...ctx.allRows.map(r => r.children.length)) <= 1) return;
+    ctx.allRows.forEach(tr => { const c = tr.children[ctx.colIdx]; if (c) c.remove(); });
+    syncColgroup(ctx.table);
+    afterRtMutation(); return;
+  }
+  const ctx = getSrcTableCtx();
+  if (!ctx) return;
+  const rows = parseMdTable(ctx.tableLines);
+  if (rows[0].length <= 1) return;
+  rows.forEach(row => { if (row.length > ctx.colIdx) row.splice(ctx.colIdx, 1); });
+  applySrcTable(ctx, rows);
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  Table right-click context menu
+// ═══════════════════════════════════════════════════════════════════════════════
+const ctxMenu = document.getElementById('ctx-menu');
+const _ctxActions = { addRow: tblAddRow, delRow: tblDelRow, addCol: tblAddCol, delCol: tblDelCol };
+
+function hideCtxMenu() { ctxMenu.style.display = 'none'; }
+
+function showCtxMenu(x, y) {
+  ctxMenu.style.display = 'block';                 // display first so we can measure
+  const mw = ctxMenu.offsetWidth, mh = ctxMenu.offsetHeight;
+  ctxMenu.style.left = Math.min(x, window.innerWidth  - mw - 6) + 'px';
+  ctxMenu.style.top  = Math.min(y, window.innerHeight - mh - 6) + 'px';
+}
+
+// Grey out delete actions that would break the table (header/separator must remain)
+function prepCtxMenu(pane, ctx) {
+  let canDelRow, canDelCol;
+  if (pane === 'richtext') {
+    canDelRow = !!ctx.row.closest('tbody') && ctx.table.querySelectorAll('tbody tr').length > 1;
+    canDelCol = Math.min(...ctx.allRows.map(r => r.children.length)) > 1;
+  } else {
+    const rows = parseMdTable(ctx.tableLines);
+    canDelRow = ctx.cursorRow > 1 && rows.length > 3;
+    canDelCol = rows[0].length > 1;
+  }
+  ctxMenu.querySelector('[data-act="delRow"]').classList.toggle('disabled', !canDelRow);
+  ctxMenu.querySelector('[data-act="delCol"]').classList.toggle('disabled', !canDelCol);
+}
+
+// Chrome moves the caret/selection to the click point before contextmenu fires,
+// so the table context functions read the correct cell from the live selection.
+rtEl.addEventListener('contextmenu', e => {
+  hideCtxMenu();
+  const ctx = getRtTableCtx();
+  if (!ctx) return;                                // not in a table → native menu
+  e.preventDefault();
+  activePane = 'richtext'; updatePaneLabels();
+  prepCtxMenu('richtext', ctx);
+  showCtxMenu(e.clientX, e.clientY);
+});
+srcEl.addEventListener('contextmenu', e => {
+  hideCtxMenu();
+  const ctx = getSrcTableCtx();
+  if (!ctx) return;
+  e.preventDefault();
+  activePane = 'source'; updatePaneLabels();
+  prepCtxMenu('source', ctx);
+  showCtxMenu(e.clientX, e.clientY);
+});
+
+// Keep the editor selection intact when pressing a menu item (don't steal focus)
+ctxMenu.addEventListener('mousedown', e => e.preventDefault());
+ctxMenu.addEventListener('click', e => {
+  const item = e.target.closest('.ctx-item');
+  if (!item || item.classList.contains('disabled')) return;
+  hideCtxMenu();
+  _ctxActions[item.dataset.act]();
+});
+
+// Dismiss
+document.addEventListener('click', hideCtxMenu);
+document.addEventListener('keydown', e => { if (e.key === 'Escape') hideCtxMenu(); });
+srcEl.addEventListener('scroll', hideCtxMenu);
+rtEl.addEventListener('scroll', hideCtxMenu);
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  Persist last-used folder via IndexedDB (FileSystemHandle can't go in localStorage)
+// ═══════════════════════════════════════════════════════════════════════════════
+function _openDb() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open('md-editor', 1);
+    req.onupgradeneeded = e => e.target.result.createObjectStore('handles');
+    req.onsuccess  = e => resolve(e.target.result);
+    req.onerror    = reject;
+  });
+}
+async function _saveHandle(handle) {
+  try { const db = await _openDb(); db.transaction('handles','readwrite').objectStore('handles').put(handle,'lastFile'); } catch(e) {}
+}
+async function _loadHandle() {
+  try {
+    const db = await _openDb();
+    return await new Promise((res, rej) => {
+      const req = db.transaction('handles','readonly').objectStore('handles').get('lastFile');
+      req.onsuccess = e => res(e.target.result || null);
+      req.onerror   = rej;
+    });
+  } catch(e) { return null; }
+}
+// Open File Picker grants only READ permission; the first save needs WRITE. Query,
+// and prompt once if needed — so Ctrl+S writes to the open file instead of Save As.
+async function _ensureWritePermission(handle) {
+  try {
+    const opts = { mode: 'readwrite' };
+    if ((await handle.queryPermission(opts)) === 'granted') return true;
+    if ((await handle.requestPermission(opts)) === 'granted') return true;
+  } catch(e) {}
+  return false;
+}
+async function _ensureReadPermission(handle) {
+  try {
+    const opts = { mode: 'read' };
+    if ((await handle.queryPermission(opts)) === 'granted') return true;
+    if ((await handle.requestPermission(opts)) === 'granted') return true;  // click is a user gesture
+  } catch(e) {}
+  return false;
+}
+
+// ── Recent files (max 7) — file handles persist in the IndexedDB store ──────────
+const MAX_RECENT = 7;
+async function _loadRecent() {
+  try {
+    const db = await _openDb();
+    const raw = await new Promise((res, rej) => {
+      const req = db.transaction('handles','readonly').objectStore('handles').get('recent');
+      req.onsuccess = e => res(Array.isArray(e.target.result) ? e.target.result : []);
+      req.onerror   = rej;
+    });
+    // Tolerate older {handle, path} entries — keep only the handle.
+    return raw.map(it => (it && it.handle) ? it.handle : it).filter(Boolean);
+  } catch(e) { return []; }
+}
+async function _saveRecent(arr) {
+  try { const db = await _openDb(); db.transaction('handles','readwrite').objectStore('handles').put(arr,'recent'); } catch(e) {}
+}
+async function _sameHandle(a, b) {
+  try { return await a.isSameEntry(b); } catch(e) { return a.name === b.name; }
+}
+async function _addRecent(handle) {
+  const arr = await _loadRecent();
+  const out = [handle];
+  for (const h of arr) {
+    if (!(await _sameHandle(handle, h))) out.push(h);
+    if (out.length >= MAX_RECENT) break;
+  }
+  await _saveRecent(out);
+}
+async function _removeRecent(handle) {
+  const arr = await _loadRecent();
+  const out = [];
+  for (const h of arr) if (!(await _sameHandle(handle, h))) out.push(h);
+  await _saveRecent(out);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  File operations
+// ═══════════════════════════════════════════════════════════════════════════════
+async function openFile() {
+  if ('showOpenFilePicker' in window) {
+    try {
+      const startIn = await _loadHandle();
+      const opts = { types: [{ description: 'Markdown / Text', accept: { 'text/plain': ['.md','.markdown','.txt'] } }] };
+      if (startIn) opts.startIn = startIn;
+      [fileHandle] = await window.showOpenFilePicker(opts);
+      _saveHandle(fileHandle);
+      srcEl.value = await (await fileHandle.getFile()).text();
+      lastSavedContent = srcEl.value;
+      _undoReset();
+      setDirty(false); updateStats(); scheduleRender(); updateRevertBtn();
+      _addRecent(fileHandle); return;
+    } catch(err) { if (err.name === 'AbortError') return; }
+  }
+  document.getElementById('file-input').click();
+}
+
+// Open the dropdown (recent files + Browse). Filenames are listed; the OS path is not
+// exposed by the File System Access API, so the hover tooltip shows the full filename.
+async function toggleOpenMenu(e) {
+  e.stopPropagation();
+  document.getElementById('img-menu').style.display = 'none';
+  document.getElementById('tbl-menu').style.display = 'none';
+  const m = document.getElementById('open-menu');
+  if (m.style.display === 'block') { m.style.display = 'none'; return; }
+  await renderRecentMenu();
+  m.style.display = 'block';
+}
+async function renderRecentMenu() {
+  const list = document.getElementById('recent-list');
+  list.innerHTML = '';
+  const recent = await _loadRecent();
+  if (!recent.length) {
+    const d = document.createElement('div');
+    d.className = 'open-empty'; d.textContent = 'No recent files';
+    list.appendChild(d);
+    return;
+  }
+  recent.forEach(h => {
+    const d = document.createElement('div');
+    d.className = 'img-opt';
+    d.textContent = h.name;
+    d.title = h.name;
+    d.addEventListener('click', () => openRecent(h));
+    list.appendChild(d);
+  });
+}
+async function openRecent(handle) {
+  document.getElementById('open-menu').style.display = 'none';
+  if (!(await _ensureReadPermission(handle))) { alert('Permission to read "' + handle.name + '" was denied.'); return; }
+  try {
+    const text = await (await handle.getFile()).text();
+    fileHandle = handle;
+    _saveHandle(handle);
+    srcEl.value = text;
+    lastSavedContent = text;
+    _undoReset();
+    setDirty(false); updateStats(); scheduleRender(); updateRevertBtn();
+    _addRecent(handle);   // move to top of the recent list
+  } catch(err) {
+    alert('Could not open "' + handle.name + '":\n' + (err && err.message || err) +
+          '\n\nIt may have been moved or deleted — removing it from Recent.');
+    _removeRecent(handle);
+  }
+}
+document.addEventListener('click', () => {
+  const m = document.getElementById('open-menu');
+  if (m) m.style.display = 'none';
+});
+
+document.getElementById('file-input').addEventListener('change', async e => {
+  const file = e.target.files[0]; if (!file) return;
+  srcEl.value = await file.text();
+  lastSavedContent = srcEl.value;
+  fileHandle = null; fileNameEl.textContent = file.name; dirty = false;
+  _undoReset();
+  updateStats(); scheduleRender(); e.target.value = '';
+});
+
+async function saveFile() {
+  flushRtSync(); // make sure source is up-to-date before saving
+  if (fileHandle) {
+    if (await _ensureWritePermission(fileHandle)) {
+      try {
+        const w = await fileHandle.createWritable();
+        await w.write(srcEl.value); await w.close();
+        lastSavedContent = srcEl.value;
+        setDirty(false);
+        (activePane === 'richtext' ? rtEl : srcEl).focus();  // dialog stole focus — give it back
+        return;
+      } catch(err) {
+        alert('Could not save to "' + fileHandle.name + '":\n' + (err && err.message || err) +
+              '\n\nUse "Save As" to choose a location.');
+        return; // don't silently retarget to a different file
+      }
+    }
+    // Permission to write was denied — keep the file association, tell the user.
+    alert('Write permission denied for "' + fileHandle.name + '". Grant access (or use "Save As").');
+    return;
+  }
+  saveFileAs();
+}
+
+async function refreshFile() {
+  if (!fileHandle) return; // no file open — nothing to reload from disk
+
+  if (dirty && !window.confirm('Reload from disk? Unsaved changes will be lost.')) return;
+
+  try {
+    const text = await fileHandle.getFile().then(f => f.text());
+    srcEl.value = text;
+    lastSavedContent = text;
+    _undoReset();
+    setDirty(false); updateStats(); scheduleRender();
+  } catch(err) { /* file may have been moved/deleted — do nothing */ }
+}
+
+async function saveFileAs() {
+  if ('showSaveFilePicker' in window) {
+    try {
+      const startIn = await _loadHandle();
+      const opts = {
+        suggestedName: fileHandle ? fileHandle.name : 'document.md',
+        types: [{ description: 'Markdown file', accept: { 'text/plain': ['.md'] } }]
+      };
+      if (startIn) opts.startIn = startIn;
+      fileHandle = await window.showSaveFilePicker(opts);
+      _saveHandle(fileHandle);
+      await saveFile(); return;
+    } catch(err) { if (err.name === 'AbortError') return; }
+  }
+  const a = Object.assign(document.createElement('a'), {
+    href: URL.createObjectURL(new Blob([srcEl.value], { type: 'text/markdown' })),
+    download: fileHandle ? fileHandle.name : 'document.md'
+  });
+  a.click(); URL.revokeObjectURL(a.href);
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  Init
+// ═══════════════════════════════════════════════════════════════════════════════
+srcEl.value = `# MD Editor
+
+A split-view Markdown editor. **Both panes are editable** — edit source on the left or rich text on the right; they stay in sync.
+
+## How to use
+
+- **Left pane** — type raw Markdown
+- **Right pane** — click to edit formatted text directly
+- **Toolbar** — applies formatting to whichever pane is active
+- **Ctrl+B / Ctrl+I** — bold / italic in either pane
+- **Ctrl+S** — save · **Ctrl+O** — open · **Ctrl+Z** — undo · **Ctrl+Y** — redo (up to 5 steps)
+- **Image ▾** — insert from URL or embed a local file as base64; or just **paste an image** from the clipboard (Ctrl+V) into either pane. **Click an image in the rich-text pane and drag its bottom-right corner to resize** (size is saved in the Markdown as a \`"=WIDTHx"\` image title).
+- **A▾ (with colored bar)** — text color · **A▾ (highlighted)** — highlight color. Pick a swatch or a custom color; the left button reapplies the last one.
+- **◀ on the divider** — hide/show the source pane
+
+## Formatting Examples
+
+**Bold**, *italic*, ~~strikethrough~~, \`inline code\`
+
+### Lists
+
+- Bullet item
+- Another item
+
+1. First step
+2. Second step
+
+- [x] Done task
+- [ ] Pending task
+
+### Blockquote
+
+> "The best way to predict the future is to create it."
+
+### Code Block
+
+\`\`\`javascript
+function greet(name) {
+  return \`Hello, \${name}!\`;
+}
+\`\`\`
+
+| Column 1 | Column 2 | Column 3 |
+|----------|----------|----------|
+| Cell     | Cell     | Cell     |
+
+---
+
+*Drag the divider to resize panes.*
+`;
+
+try { document.execCommand('defaultParagraphSeparator', false, 'p'); } catch(e){}
+_undo.current = srcEl.value; // baseline for the first undo snapshot
+updateStats();
+scheduleRender();
+updatePaneLabels();
+toggleSrcPane(); // start with source pane hidden
+</script>
+</body>
+</html>
